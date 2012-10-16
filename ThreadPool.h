@@ -7,6 +7,40 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <future>
+
+// need this type to "erase" the return type of the packaged task
+struct any_packaged_base {
+    virtual void execute() = 0;
+};
+
+template<class R>
+struct any_packaged : public any_packaged_base {
+    any_packaged(std::packaged_task<R()> &&t)
+     : task(std::move(t))
+    {
+    }
+    void execute()
+    {
+        task();
+    }
+    std::packaged_task<R()> task;
+};
+
+class any_packaged_task {
+public:
+    template<class R>
+    any_packaged_task(std::packaged_task<R()> &&task)
+     : ptr(new any_packaged<R>(std::move(task)))
+    {
+    }
+    void operator()()
+    {
+        ptr->execute();
+    }
+private:
+    std::shared_ptr<any_packaged_base> ptr;
+};
 
 class ThreadPool;
  
@@ -19,102 +53,12 @@ private:
     ThreadPool &pool;
 };
 
-template<class T>
-class Result {
-    struct ResultImpl {
-        ResultImpl() : value(T()), available(false) { }
-        T value;
-        bool available;
-        std::mutex lock;
-        std::condition_variable cond;
-    };
-public:
-    Result() : impl(new ResultImpl()) { }
-    bool available() const
-    {
-        std::unique_lock<std::mutex> ul(impl->lock);
-        return impl->available;
-    }
-    void wait()
-    {
-        if(!impl)
-            return;
-        std::unique_lock<std::mutex> ul(impl->lock);
-        if(impl->available)
-            return;
-        impl->cond.wait(ul);
-    }
-    void signal() const
-    {
-        std::unique_lock<std::mutex> ul(impl->lock);
-        impl->available = true; impl->cond.notify_all();
-    }
-    bool valid() const
-    { 
-        std::unique_lock<std::mutex> ul(impl->lock);
-        return static_cast<bool>(impl);
-    }
-
-    T& get()
-    { 
-        wait(); 
-        return impl->value;
-    }
-    void set(T v) const
-    {
-        std::unique_lock<std::mutex> ul(impl->lock); 
-        impl->value = v; 
-    }
-  
-private:
-    std::shared_ptr<ResultImpl> impl;
-};
-
-template<>
-class Result<void> {
-    struct ResultImpl {
-        ResultImpl() : available(false) {  }
-        bool available;
-        std::mutex lock;
-        std::condition_variable cond;
-    };
-public:
-    Result() : impl(new ResultImpl()) { }
-
-    bool available() const
-    {
-        std::unique_lock<std::mutex> ul(impl->lock);
-        return impl->available;
-    }
-    void wait()
-    {
-        if(!impl)
-            return;
-        std::unique_lock<std::mutex> ul(impl->lock);
-        if(impl->available)
-            return;
-        impl->cond.wait(ul);
-    }
-    void signal() const
-    {
-        std::unique_lock<std::mutex> ul(impl->lock);
-        impl->available = true; impl->cond.notify_all();
-    }
-    bool valid() const
-    { 
-        std::unique_lock<std::mutex> ul(impl->lock);
-        return static_cast<bool>(impl);
-    }
-private:
-    std::shared_ptr<ResultImpl> impl;
-};
-
 // the actual thread pool
 class ThreadPool {
 public:
     ThreadPool(size_t);
     template<class T, class F>
-    Result<T> enqueue(F f);
+    std::future<T> enqueue(F f);
     ~ThreadPool();
 private:
     friend class Worker;
@@ -122,7 +66,7 @@ private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
-    std::deque< std::function<void()> > tasks;
+    std::deque< any_packaged_task > tasks;
     
     // synchronization
     std::mutex queue_mutex;
@@ -132,18 +76,16 @@ private:
  
 void Worker::operator()()
 {
-    std::function<void()> task;
     while(true)
     {
-        {
-            std::unique_lock<std::mutex> lock(pool.queue_mutex);
-            while(!pool.stop && pool.tasks.empty())
-                pool.condition.wait(lock);
-            if(pool.stop)
-                return;
-            task = pool.tasks.front();
-            pool.tasks.pop_front();
-        }
+        std::unique_lock<std::mutex> lock(pool.queue_mutex);
+        while(!pool.stop && pool.tasks.empty())
+            pool.condition.wait(lock);
+        if(pool.stop)
+            return;
+        any_packaged_task task(pool.tasks.front());
+        pool.tasks.pop_front();
+        lock.unlock();
         task();
     }
 }
@@ -156,36 +98,15 @@ ThreadPool::ThreadPool(size_t threads)
         workers.push_back(std::thread(Worker(*this)));
 }
 
-template<class T, class F>
-struct CallAndSet {
-    void operator()(const Result<T> &res, const F f)
-    {
-        res.set(f());
-        res.signal();
-    }
-};
-
-template<class F>
-struct CallAndSet<void,F> {
-    void operator()(const Result<void> &res, const F &f)
-    {
-        f();
-        res.signal();
-    }
-};
- 
 // add new work item to the pool
 template<class T, class F>
-Result<T> ThreadPool::enqueue(F f)
+std::future<T> ThreadPool::enqueue(F f)
 {
-    Result<T> res;
+    std::packaged_task<T()> task(f);
+    std::future<T> res= task.get_future();    
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        tasks.push_back(std::function<void()>(
-        [f,res]()
-        {
-            CallAndSet<T,F>()(res, f);
-        }));
+        std::unique_lock<std::mutex> lock(queue_mutex);    
+        tasks.push_back(any_packaged_task(std::move(task)));
     }
     condition.notify_one();
     return res;
