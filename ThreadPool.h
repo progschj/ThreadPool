@@ -2,45 +2,14 @@
 #define THREAD_POOL_H
 
 #include <vector>
-#include <deque>
+#include <queue>
 #include <memory>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <future>
-
-// need this type to "erase" the return type of the packaged task
-struct any_packaged_base {
-    virtual void execute() = 0;
-};
-
-template<class R>
-struct any_packaged : public any_packaged_base {
-    any_packaged(std::packaged_task<R()> &&t)
-     : task(std::move(t))
-    {
-    }
-    void execute()
-    {
-        task();
-    }
-    std::packaged_task<R()> task;
-};
-
-class any_packaged_task {
-public:
-    template<class R>
-    any_packaged_task(std::packaged_task<R()> &&task)
-     : ptr(new any_packaged<R>(std::move(task)))
-    {
-    }
-    void operator()()
-    {
-        ptr->execute();
-    }
-private:
-    std::shared_ptr<any_packaged_base> ptr;
-};
+#include <functional>
+#include <stdexcept>
 
 class ThreadPool;
  
@@ -66,7 +35,7 @@ private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
-    std::deque< any_packaged_task > tasks;
+    std::queue< std::function<void()> > tasks;
     
     // synchronization
     std::mutex queue_mutex;
@@ -81,10 +50,10 @@ void Worker::operator()()
         std::unique_lock<std::mutex> lock(pool.queue_mutex);
         while(!pool.stop && pool.tasks.empty())
             pool.condition.wait(lock);
-        if(pool.stop)
+        if(pool.stop && pool.tasks.empty())
             return;
-        any_packaged_task task(pool.tasks.front());
-        pool.tasks.pop_front();
+        std::function<void()> task(pool.tasks.front());
+        pool.tasks.pop();
         lock.unlock();
         task();
     }
@@ -102,11 +71,15 @@ ThreadPool::ThreadPool(size_t threads)
 template<class T, class F>
 std::future<T> ThreadPool::enqueue(F f)
 {
-    std::packaged_task<T()> task(f);
-    std::future<T> res= task.get_future();    
+    // don't allow enqueueing after stopping the pool
+    if(stop)
+        throw std::runtime_error("enqueue on stopped ThreadPool");
+
+    auto task = std::make_shared< std::packaged_task<T()> >(f);
+    std::future<T> res = task->get_future();    
     {
         std::unique_lock<std::mutex> lock(queue_mutex);    
-        tasks.push_back(any_packaged_task(std::move(task)));
+        tasks.push([task](){ (*task)(); });
     }
     condition.notify_one();
     return res;
