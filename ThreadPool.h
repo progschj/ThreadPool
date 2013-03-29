@@ -12,15 +12,6 @@
 #include <stdexcept>
 
 class ThreadPool;
- 
-// our worker thread objects
-class Worker {
-public:
-    Worker(ThreadPool &s) : pool(s) { }
-    void operator()();
-private:
-    ThreadPool &pool;
-};
 
 // the actual thread pool
 class ThreadPool {
@@ -31,8 +22,6 @@ public:
         -> std::future<decltype(std::forward<F>(f)(std::forward<Args>(args)...))>;
     ~ThreadPool();
 private:
-    friend class Worker;
-
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
@@ -44,28 +33,28 @@ private:
     bool stop;
 };
  
-void Worker::operator()()
-{
-    while(true)
-    {
-        std::unique_lock<std::mutex> lock(pool.queue_mutex);
-        while(!pool.stop && pool.tasks.empty())
-            pool.condition.wait(lock);
-        if(pool.stop && pool.tasks.empty())
-            return;
-        std::function<void()> task(pool.tasks.front());
-        pool.tasks.pop();
-        lock.unlock();
-        task();
-    }
-}
- 
 // the constructor just launches some amount of workers
 ThreadPool::ThreadPool(size_t threads)
     :   stop(false)
 {
     for(size_t i = 0;i<threads;++i)
-        workers.push_back(std::thread(Worker(*this)));
+        workers.push_back(std::thread(
+            [this]
+            {
+                while(true)
+                {
+                    std::unique_lock<std::mutex> lock(this->queue_mutex);
+                    while(!this->stop && this->tasks.empty())
+                        this->condition.wait(lock);
+                    if(this->stop && this->tasks.empty())
+                        return;
+                    std::function<void()> task(this->tasks.front());
+                    this->tasks.pop();
+                    lock.unlock();
+                    task();
+                }
+            }
+        ));
 }
 
 // add new work item to the pool
