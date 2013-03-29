@@ -27,7 +27,8 @@ class ThreadPool {
 public:
     ThreadPool(size_t);
     template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<decltype(std::forward<F>(f)(std::forward<Args>(args)...))>;
+    auto enqueue(F&& f, Args&&... args) 
+        -> std::future<decltype(std::forward<F>(f)(std::forward<Args>(args)...))>;
     ~ThreadPool();
 private:
     friend class Worker;
@@ -69,7 +70,8 @@ ThreadPool::ThreadPool(size_t threads)
 
 // add new work item to the pool
 template<class F, class... Args>
-auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<decltype(std::forward<F>(f)(std::forward<Args>(args)...))>
+auto ThreadPool::enqueue(F&& f, Args&&... args) 
+    -> std::future<decltype(std::forward<F>(f)(std::forward<Args>(args)...))>
 {
     typedef decltype(std::forward<F>(f)(std::forward<Args>(args)...)) return_type;
     
@@ -77,7 +79,10 @@ auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<decltype(std::for
     if(stop)
         throw std::runtime_error("enqueue on stopped ThreadPool");
 
-    auto task = std::make_shared< std::packaged_task<return_type()> >(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+    auto task = std::make_shared< std::packaged_task<return_type()> >(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+        );
+        
     std::future<return_type> res = task->get_future();    
     {
         std::unique_lock<std::mutex> lock(queue_mutex);    
