@@ -11,9 +11,6 @@
 #include <functional>
 #include <stdexcept>
 
-class ThreadPool;
-
-// the actual thread pool
 class ThreadPool {
 public:
     ThreadPool(size_t);
