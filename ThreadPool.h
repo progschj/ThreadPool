@@ -69,15 +69,15 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
         
-    std::future<return_type> res = task->get_future();    
+    std::future<return_type> res = task->get_future();
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);    
+        std::unique_lock<std::mutex> lock(queue_mutex);
         tasks.push([task](){ (*task)(); });
     }
     condition.notify_one();
     return res;
 }
- 
+
 // the destructor joins all threads
 inline ThreadPool::~ThreadPool()
 {
