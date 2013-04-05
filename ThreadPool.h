@@ -11,9 +11,6 @@
 #include <functional>
 #include <stdexcept>
 
-class ThreadPool;
-
-// the actual thread pool
 class ThreadPool {
 public:
     ThreadPool(size_t);
@@ -34,7 +31,7 @@ private:
 };
  
 // the constructor just launches some amount of workers
-ThreadPool::ThreadPool(size_t threads)
+inline ThreadPool::ThreadPool(size_t threads)
     :   stop(false)
 {
     for(size_t i = 0;i<threads;++i)
@@ -82,7 +79,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 }
  
 // the destructor joins all threads
-ThreadPool::~ThreadPool()
+inline ThreadPool::~ThreadPool()
 {
     stop = true;
     condition.notify_all();
