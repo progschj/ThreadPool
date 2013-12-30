@@ -7,8 +7,10 @@
 int main()
 {
     
-    ThreadPool pool(4);
+    ThreadPool pool;
     std::vector< std::future<int> > results;
+    
+    std::cout << "Number of workers: " << pool.noWorkers() << std::endl;
 
     for(int i = 0; i < 8; ++i) {
         results.push_back(
