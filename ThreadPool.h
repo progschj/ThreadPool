@@ -10,13 +10,16 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
+#include <algorithm>
 
 class ThreadPool {
 public:
     ThreadPool(size_t);
+    ThreadPool();
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
+    size_t noWorkers() const;
     ~ThreadPool();
 private:
     // need to keep track of threads so we can join them
@@ -54,6 +57,11 @@ inline ThreadPool::ThreadPool(size_t threads)
         );
 }
 
+// the default number of workers is given by max(1, std::thread::hardware_concurrency())
+inline ThreadPool::ThreadPool() : ThreadPool(std::max(1u, std::thread::hardware_concurrency()))
+{
+}
+
 // add new work item to the pool
 template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args) 
@@ -76,6 +84,12 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     }
     condition.notify_one();
     return res;
+}
+
+// it may be useful to retrieve the number of workers at runtime
+inline size_t ThreadPool::noWorkers() const
+{
+    return workers.size();
 }
 
 // the destructor joins all threads
