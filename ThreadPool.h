@@ -38,7 +38,7 @@ inline ThreadPool::ThreadPool(size_t threads)
         workers.emplace_back(
             [this]
             {
-                while(true)
+                for(;;)
                 {
                     std::unique_lock<std::mutex> lock(this->queue_mutex);
                     while(!this->stop && this->tasks.empty())
