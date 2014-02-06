@@ -10,7 +10,7 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
-#include <iostream>
+
 class semaphore{
   private:
     std::mutex mtx;
