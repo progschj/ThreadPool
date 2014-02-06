@@ -10,19 +10,52 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
+#include <iostream>
+class semaphore{
+  private:
+    std::mutex mtx;
+    std::condition_variable cv;
+    int count;
+
+  public:
+    //If the initial value of count is less than 0, then it's a fake semaphore.
+    semaphore(int count_ = 0):count(count_){;}
+    
+    void notify(){
+      if(count < 0)
+        return;
+      std::unique_lock<std::mutex> lck(mtx);
+      ++count;
+      cv.notify_one();
+    }
+    
+    void wait(){
+      if(count < 0)
+        return;   
+      std::unique_lock<std::mutex> lck(mtx);
+      while(count == 0){
+        cv.wait(lck);
+      }
+      count--;
+    }
+};
 
 class ThreadPool {
 public:
-    ThreadPool(size_t);
+    //If the queue_size is less than 0, then there's no max limit on the queue size.
+    ThreadPool(size_t, int queue_size = -1);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
     ~ThreadPool();
+
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
     std::queue< std::function<void()> > tasks;
+    // semaphore which can limit the size of the task queue.        
+    semaphore sem;
     
     // synchronization
     std::mutex queue_mutex;
@@ -31,8 +64,8 @@ private:
 };
  
 // the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
+inline ThreadPool::ThreadPool(size_t threads, int queue_size)
+    :   stop(false), sem(queue_size)
 {
     for(size_t i = 0;i<threads;++i)
         workers.emplace_back(
@@ -49,6 +82,7 @@ inline ThreadPool::ThreadPool(size_t threads)
                     this->tasks.pop();
                     lock.unlock();
                     task();
+                    sem.notify();
                 }
             }
         );
@@ -59,6 +93,9 @@ template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args) 
     -> std::future<typename std::result_of<F(Args...)>::type>
 {
+    //Block if reach the max limit of the queue size.
+    sem.wait();
+
     typedef typename std::result_of<F(Args...)>::type return_type;
     
     // don't allow enqueueing after stopping the pool
