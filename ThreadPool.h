@@ -28,8 +28,8 @@ private:
 
     // synchronization
     std::mutex queue_mutex;
-    std::condition_variable condition;
-    std::condition_variable queue_condition;
+    std::condition_variable work_available;
+    std::condition_variable not_full;
     bool stop;
 };
  
@@ -46,7 +46,7 @@ inline ThreadPool::ThreadPool(size_t threads, int queue_size = 20)
                 {
                     std::unique_lock<std::mutex> lock(this->queue_mutex);
                     while(!this->stop && this->tasks.empty())
-                        this->condition.wait(lock);
+                        this->work_available.wait(lock);
                     if(this->stop && this->tasks.empty())
                         return;
                     std::function<void()> task(this->tasks.front());
@@ -56,7 +56,7 @@ inline ThreadPool::ThreadPool(size_t threads, int queue_size = 20)
                     
                     // if we do have a maximum size on task queue
                     if(this->max_queue_size > 0)
-                      this->queue_condition.notify_one(); 
+                      this->not_full.notify_one(); 
                 }
             }
         );
@@ -78,7 +78,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     {
       std::unique_lock<std::mutex> lock(queue_mutex);
       if(tasks.size() > this->max_queue_size)
-        this->queue_condition.wait(lock);
+        this->not_full.wait(lock);
     }
 
     auto task = std::make_shared< std::packaged_task<return_type()> >(
@@ -90,7 +90,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
         std::unique_lock<std::mutex> lock(queue_mutex);
         tasks.push([task](){ (*task)(); });
     }
-    condition.notify_one();
+    work_available.notify_one();
     return res;
 }
 
@@ -101,7 +101,8 @@ inline ThreadPool::~ThreadPool()
         std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
     }
-    condition.notify_all();
+    work_available.notify_all();
+    this->not_full.notify_all();
     for(size_t i = 0;i<workers.size();++i)
         workers[i].join();
 }
