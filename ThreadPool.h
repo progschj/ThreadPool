@@ -11,61 +11,32 @@
 #include <functional>
 #include <stdexcept>
 
-class semaphore{
-  private:
-    std::mutex mtx;
-    std::condition_variable cv;
-    int count;
-
-  public:
-    //If the initial value of count is less than 0, then it's a fake semaphore.
-    semaphore(int count_ = 0):count(count_){;}
-    
-    void notify(){
-      if(count < 0)
-        return;
-      std::unique_lock<std::mutex> lck(mtx);
-      ++count;
-      cv.notify_one();
-    }
-    
-    void wait(){
-      if(count < 0)
-        return;   
-      std::unique_lock<std::mutex> lck(mtx);
-      while(count == 0){
-        cv.wait(lck);
-      }
-      count--;
-    }
-};
-
 class ThreadPool {
 public:
-    //If the queue_size is less than 0, then there's no max limit on the queue size.
-    ThreadPool(size_t, int queue_size = -1);
+    ThreadPool(size_t, int);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
     ~ThreadPool();
-
 private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
     std::queue< std::function<void()> > tasks;
-    // semaphore which can limit the size of the task queue.        
-    semaphore sem;
-    
+    // maximum size of queue
+    int max_queue_size;
+
     // synchronization
     std::mutex queue_mutex;
     std::condition_variable condition;
+    std::condition_variable queue_condition;
     bool stop;
 };
  
-// the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads, int queue_size)
-    :   stop(false), sem(queue_size)
+// the constructor just launches some amount of workers,
+// specify the max size of the queue, or no limit if the queue_size is the negative.
+inline ThreadPool::ThreadPool(size_t threads, int queue_size = 20)
+    :   stop(false), max_queue_size(queue_size)
 {
     for(size_t i = 0;i<threads;++i)
         workers.emplace_back(
@@ -82,7 +53,10 @@ inline ThreadPool::ThreadPool(size_t threads, int queue_size)
                     this->tasks.pop();
                     lock.unlock();
                     task();
-                    sem.notify();
+                    
+                    // if we do have a maximum size on task queue
+                    if(this->max_queue_size > 0)
+                      this->queue_condition.notify_one(); 
                 }
             }
         );
@@ -93,19 +67,24 @@ template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args) 
     -> std::future<typename std::result_of<F(Args...)>::type>
 {
-    //Block if reach the max limit of the queue size.
-    sem.wait();
-
     typedef typename std::result_of<F(Args...)>::type return_type;
     
     // don't allow enqueueing after stopping the pool
     if(stop)
         throw std::runtime_error("enqueue on stopped ThreadPool");
+    
+    // if we do have a maximum size on task queue
+    if(this->max_queue_size > 0)
+    {
+      std::unique_lock<std::mutex> lock(queue_mutex);
+      if(tasks.size() > this->max_queue_size)
+        this->queue_condition.wait(lock);
+    }
 
     auto task = std::make_shared< std::packaged_task<return_type()> >(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
-        
+    
     std::future<return_type> res = task->get_future();
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
