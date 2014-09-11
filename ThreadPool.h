@@ -1,5 +1,5 @@
-#ifndef THREAD_POOL_H
-#define THREAD_POOL_H
+#ifndef THREAD_POOL_H_7ea1ee6b_4f17_4c09_b76b_3d44e102400c
+#define THREAD_POOL_H_7ea1ee6b_4f17_4c09_b76b_3d44e102400c
 
 #include <vector>
 #include <queue>
@@ -101,4 +101,4 @@ inline ThreadPool::~ThreadPool()
 
 } // namespace progschj
 
-#endif
+#endif // THREAD_POOL_H_7ea1ee6b_4f17_4c09_b76b_3d44e102400c
