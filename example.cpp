@@ -4,9 +4,11 @@
 
 #include "ThreadPool.h"
 
+using namespace progschj;
+
 int main()
 {
-    
+
     ThreadPool pool(4);
     std::vector< std::future<int> > results;
 
@@ -19,11 +21,11 @@ int main()
                 return i*i;
             })
         );
-    }   
-    
+    }
+
     for(size_t i = 0;i<results.size();++i)
         std::cout << results[i].get() << ' ';
     std::cout << std::endl;
-    
+
     return 0;
 }
