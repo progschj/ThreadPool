@@ -91,8 +91,8 @@ inline ThreadPool::~ThreadPool()
         stop = true;
     }
     condition.notify_all();
-    for(size_t i = 0;i<workers.size();++i)
-        workers[i].join();
+    for(std::thread & worker: workers)
+        worker.join();
 }
 
 #endif
