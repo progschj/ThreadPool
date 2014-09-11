@@ -17,7 +17,7 @@ namespace progschj {
 class ThreadPool {
 public:
     explicit ThreadPool(size_t threads
-        = std::thread::hardware_concurrency() * 2);
+        = std::max(2u, std::thread::hardware_concurrency() * 2));
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args)
         -> std::future<typename std::result_of<F(Args...)>::type>;
