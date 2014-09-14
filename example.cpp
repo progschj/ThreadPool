@@ -23,6 +23,8 @@ int main()
         );
     }
 
+    pool.wait_until_empty();
+
     for(auto && result: results)
         std::cout << result.get() << ' ';
     std::cout << std::endl;
