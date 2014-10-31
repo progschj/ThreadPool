@@ -6,9 +6,9 @@
 int main()
 {
     
-    std::future<int> last;
+    std::future<int> first, second, last;
     {
-        // the pool will discard pending tasks when exiting
+        // the pool will execute all pending tasks before exiting
         ThreadPool pool(2, false);
         
         auto task1 = []() -> int
@@ -32,14 +32,19 @@ int main()
             return 3;
         };
         
-        pool.enqueue(task1);
-        pool.enqueue(task2);
+        first = pool.enqueue(task1);
+        second = pool.enqueue(task2);
         last = pool.enqueue(task3);
+        
+        // The pool will destroy immediately after queueing tasks, so there is no gurantee which tasks will get to run on the threads, when drain is set to FALSE.
+        // Use this sleep to delay this. Ugly, but effective for demo purposes
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     
     try
     {
-        //when drain is false, future throws an exception if task was not completed
+        std::cout << "===" << first.get() << "===" << std::endl;
+        std::cout << "===" << second.get() << "===" << std::endl;
         std::cout << "===" << last.get() << "===" << std::endl;
     }
     catch( std::exception& e)
