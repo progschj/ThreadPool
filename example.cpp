@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <chrono>
 
 #include "ThreadPool.h"
@@ -7,23 +6,46 @@
 int main()
 {
     
-    ThreadPool pool(4);
-    std::vector< std::future<int> > results;
-
-    for(int i = 0; i < 8; ++i) {
-        results.emplace_back(
-            pool.enqueue([i] {
-                std::cout << "hello " << i << std::endl;
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                std::cout << "world " << i << std::endl;
-                return i*i;
-            })
-        );
+    std::future<int> last;
+    {
+        // the pool will discard pending tasks when exiting
+        ThreadPool pool(2, true);
+        
+        auto task1 = []() -> int
+        {
+            std::cout << "Task 1" << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            return 1;
+        };
+        
+        auto task2 = []() -> int
+        {
+            std::cout << "Task 2" << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            return 2;
+        };
+        
+        auto task3 = []() -> int
+        {
+            std::cout << "Task 3" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            return 3;
+        };
+        
+        pool.enqueue(task1);
+        pool.enqueue(task2);
+        last = pool.enqueue(task3);
     }
-
-    for(auto && result: results)
-        std::cout << result.get() << ' ';
-    std::cout << std::endl;
+    
+    try
+    {
+        //when immediate exit is true, future throws an exception if task was not completed
+        std::cout << "===" << last.get() << "===" << std::endl;
+    }
+    catch( std::exception& e)
+    {
+        std::cout << e.what() << std::endl;
+    }
     
     return 0;
 }

@@ -29,10 +29,13 @@ private:
     std::mutex queue_mutex;
     std::condition_variable condition;
     bool stop;
+    
+    //exit policy
     bool immediateExit;
 };
 
-// the constructor just launches some amount of workers
+//threads - number of threads to start
+//immediateExit - when destructor is called, if immediateExit is true, the remaining pending tasks are discarded
 inline ThreadPool::ThreadPool(size_t threads, bool immediateExit)
 : stop(false),
 immediateExit(immediateExit)
