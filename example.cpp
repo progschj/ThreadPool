@@ -9,7 +9,7 @@ int main()
     std::future<int> first, second, last;
     {
         // the pool will execute all pending tasks before exiting
-        ThreadPool pool(2, false);
+        ThreadPool pool(2, true);
         
         auto task1 = []() -> int
         {
