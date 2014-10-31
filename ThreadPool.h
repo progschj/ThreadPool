@@ -12,6 +12,7 @@
 #include <stdexcept>
 
 class ThreadPool {
+    using Task = std::function<void()>;
 public:
     ThreadPool(size_t);
     template<class F, class... Args>
@@ -22,7 +23,7 @@ private:
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers;
     // the task queue
-    std::queue< std::function<void()> > tasks;
+    std::queue< Task > tasks;
     
     // synchronization
     std::mutex queue_mutex;
@@ -40,13 +41,13 @@ inline ThreadPool::ThreadPool(size_t threads)
             {
                 for(;;)
                 {
-                    std::function<void()> task;
+                    Task task;
 
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
                         this->condition.wait(lock,
                             [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
+                        if(this->stop)
                             return;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
@@ -69,7 +70,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
         
-    std::future<return_type> res = task->get_future();
+    auto res = task->get_future();
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
 
@@ -91,7 +92,7 @@ inline ThreadPool::~ThreadPool()
         stop = true;
     }
     condition.notify_all();
-    for(std::thread &worker: workers)
+    for(auto& worker: workers)
         worker.join();
 }
 
