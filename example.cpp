@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <chrono>
 
 #include "ThreadPool.h"
@@ -7,23 +6,51 @@
 int main()
 {
     
-    ThreadPool pool(4);
-    std::vector< std::future<int> > results;
-
-    for(int i = 0; i < 8; ++i) {
-        results.emplace_back(
-            pool.enqueue([i] {
-                std::cout << "hello " << i << std::endl;
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                std::cout << "world " << i << std::endl;
-                return i*i;
-            })
-        );
+    std::future<int> first, second, last;
+    {
+        // the pool will execute all pending tasks before exiting
+        ThreadPool pool(2, true);
+        
+        auto task1 = []() -> int
+        {
+            std::cout << "Task 1" << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            return 1;
+        };
+        
+        auto task2 = []() -> int
+        {
+            std::cout << "Task 2" << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            return 2;
+        };
+        
+        auto task3 = []() -> int
+        {
+            std::cout << "Task 3" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            return 3;
+        };
+        
+        first = pool.enqueue(task1);
+        second = pool.enqueue(task2);
+        last = pool.enqueue(task3);
+        
+        // The pool will destroy immediately after queueing tasks, so there is no gurantee which tasks will get to run on the threads, when drain is set to FALSE.
+        // Use this sleep to delay this. Ugly, but effective for demo purposes
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-
-    for(auto && result: results)
-        std::cout << result.get() << ' ';
-    std::cout << std::endl;
+    
+    try
+    {
+        std::cout << "===" << first.get() << "===" << std::endl;
+        std::cout << "===" << second.get() << "===" << std::endl;
+        std::cout << "===" << last.get() << "===" << std::endl;
+    }
+    catch( std::exception& e)
+    {
+        std::cout << e.what() << std::endl;
+    }
     
     return 0;
 }
