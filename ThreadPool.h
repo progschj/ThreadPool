@@ -14,7 +14,7 @@
 class ThreadPool {
     using Task = std::function<void()>;
 public:
-    ThreadPool(size_t threads, bool immediateExit);
+    ThreadPool(size_t threads, bool drain);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args)
         -> std::future<typename std::result_of<F(Args...)>::type>;
@@ -31,14 +31,14 @@ private:
     bool stop;
     
     //exit policy
-    bool immediateExit;
+    bool drain;
 };
 
 //threads - number of threads to start
 //immediateExit - when destructor is called, if immediateExit is true, the remaining pending tasks are discarded
-inline ThreadPool::ThreadPool(size_t threads, bool immediateExit)
+inline ThreadPool::ThreadPool(size_t threads, bool drain)
 : stop(false),
-immediateExit(immediateExit)
+drain(drain)
 {
     for(size_t i = 0;i<threads;++i)
         workers.emplace_back(
@@ -52,8 +52,8 @@ immediateExit(immediateExit)
                                          std::unique_lock<std::mutex> lock(this->queue_mutex);
                                          this->condition.wait(lock,
                                                               [this]{ return this->stop || !this->tasks.empty(); });
-                                         bool dontDrain = this->immediateExit ? true : this->tasks.empty();
-                                         if(this->stop && dontDrain)
+                                         bool drainQueue = this->drain ? !this->tasks.empty() : false;
+                                         if(this->stop && !drainQueue)
                                              return;
                                          task = std::move(this->tasks.front());
                                          this->tasks.pop();

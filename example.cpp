@@ -9,7 +9,7 @@ int main()
     std::future<int> last;
     {
         // the pool will discard pending tasks when exiting
-        ThreadPool pool(2, true);
+        ThreadPool pool(2, false);
         
         auto task1 = []() -> int
         {
@@ -39,7 +39,7 @@ int main()
     
     try
     {
-        //when immediate exit is true, future throws an exception if task was not completed
+        //when drain is false, future throws an exception if task was not completed
         std::cout << "===" << last.get() << "===" << std::endl;
     }
     catch( std::exception& e)
