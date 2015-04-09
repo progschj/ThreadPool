@@ -89,7 +89,8 @@ inline ThreadPool::ThreadPool(size_t threads)
                 [this] { return this->stop || !this->tasks.empty(); });
                 if(this->stop && this->tasks.empty())
                     return;
-                //move shared_prt never throw exception,avoid terminate process.
+                //move construct shared_prt never throw exception,avoid terminate process.
+                //move construct other thing maybe throw.
                 task = std::move(this->tasks.front());
                 this->tasks.pop();
             }
