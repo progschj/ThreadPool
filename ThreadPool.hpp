@@ -17,6 +17,9 @@ public:
     // the constructor just launches some amount of workers
     ThreadPool(size_t threads_n = std::thread::hardware_concurrency()) : stop(false)
     {
+        if(!threads_n)
+            throw std::invalid_argument("more than zero threads expected");
+
         this->workers.reserve(threads_n);
         for(; threads_n; --threads_n)
             this->workers.emplace_back(
@@ -45,10 +48,6 @@ public:
     template<class F, class... Args>
     std::future<typename std::result_of<F(Args...)>::type> enqueue(F&& f, Args&&... args)
     {
-        // don't allow enqueueing after stopping the pool
-        if(this->stop)
-            throw std::runtime_error("enqueue on stopped ThreadPool");
-
         using packaged_task_t = std::packaged_task<typename std::result_of<F(Args...)>::type ()>;
 
         std::shared_ptr<packaged_task_t> task(new packaged_task_t(
