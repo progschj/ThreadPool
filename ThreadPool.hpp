@@ -44,6 +44,10 @@ public:
                 }
             );
     }
+    ThreadPool(const ThreadPool&) = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
+    ThreadPool(ThreadPool&&) = delete;
+    ThreadPool& operator=(ThreadPool&&) = delete;
     // add new work item to the pool
     template<class F, class... Args>
     std::future<typename std::result_of<F(Args...)>::type> enqueue(F&& f, Args&&... args)
@@ -62,7 +66,7 @@ public:
         return res;
     }
     // the destructor joins all threads
-    ~ThreadPool()
+    virtual ~ThreadPool()
     {
         this->stop = true;
         this->condition.notify_all();
