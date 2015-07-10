@@ -15,7 +15,7 @@
 class ThreadPool {
 public:
     // the constructor just launches some amount of workers
-    ThreadPool(size_t threads_n) : stop(false)
+    ThreadPool(size_t threads_n = std::thread::hardware_concurrency()) : stop(false)
     {
         this->workers.reserve(threads_n);
         for(; threads_n; --threads_n)
