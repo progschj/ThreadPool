@@ -1,17 +1,45 @@
+/*
+Copyright (c) 2012 Jakob Progsch, Václav Zeman
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+   1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+
+   2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+
+   3. This notice may not be removed or altered from any source
+   distribution.
+*/
+
 #ifndef THREAD_POOL_HPP
 #define THREAD_POOL_HPP
 
+// containers
 #include <vector>
 #include <queue>
-#include <memory>
+// threading
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
 #include <future>
+// utility wrappers
+#include <memory>
 #include <functional>
+// exceptions
 #include <stdexcept>
 
+// std::thread pool for resources recycling
 class ThreadPool {
 public:
     // the constructor just launches some amount of workers
@@ -44,6 +72,7 @@ public:
                 }
             );
     }
+    // deleted copy&move ctors&assignments
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
     ThreadPool(ThreadPool&&) = delete;
@@ -82,7 +111,8 @@ private:
     // synchronization
     std::mutex queue_mutex;
     std::condition_variable condition;
+    // workers finalization flag
     std::atomic_bool stop;
 };
 
-#endif
+#endif // THREAD_POOL_HPP
