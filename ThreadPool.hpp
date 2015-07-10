@@ -15,14 +15,14 @@
 class ThreadPool {
 public:
     // the constructor just launches some amount of workers
-    ThreadPool(size_t threads) : stop(false)
+    ThreadPool(size_t threads_n) : stop(false)
     {
-        workers.reserve(threads);
-        for(; threads; --threads)
-            workers.emplace_back(
+        this->workers.reserve(threads_n);
+        for(; threads_n; --threads_n)
+            this->workers.emplace_back(
                 [this]
                 {
-                    for(;;)
+                    while(true)
                     {
                         std::function<void()> task;
 
@@ -46,7 +46,7 @@ public:
     std::future<typename std::result_of<F(Args...)>::type> enqueue(F&& f, Args&&... args)
     {
         // don't allow enqueueing after stopping the pool
-        if(stop)
+        if(this->stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
 
         using packaged_task_t = std::packaged_task<typename std::result_of<F(Args...)>::type ()>;
@@ -56,18 +56,18 @@ public:
             ));
         auto res = task->get_future();
         {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            tasks.emplace([task](){ (*task)(); });
+            std::unique_lock<std::mutex> lock(this->queue_mutex);
+            this->tasks.emplace([task](){ (*task)(); });
         }
-        condition.notify_one();
+        this->condition.notify_one();
         return res;
     }
     // the destructor joins all threads
     ~ThreadPool()
     {
-        stop = true;
-        condition.notify_all();
-        for(std::thread &worker: workers)
+        this->stop = true;
+        this->condition.notify_all();
+        for(std::thread& worker : this->workers)
             worker.join();
     }
 private:
