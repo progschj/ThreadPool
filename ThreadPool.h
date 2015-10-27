@@ -41,15 +41,16 @@ inline ThreadPool::ThreadPool(size_t threads)
                 for(;;)
                 {
                     std::function<void()> task;
-                    
-                    // !!! condition notify_all() may lost, then worker thread will hang on condtion.wait
-                    // suppose worker is execute here, meanwhile the pool instance is destructing: set stop = true and execute condition.notify_all();
-                    // if here lacks check stop, this worker will hang on condtion.wait() because notify is lost
-                    if (this->stop)
-                        return;
 
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
+                        
+                        // !!! condition notify_all() may lost, then worker thread will hang on condtion.wait
+                        // suppose worker is execute here, meanwhile the pool instance is destructing: set stop = true and execute condition.notify_all();
+                        // if here lacks check stop, this worker will hang on condtion.wait() because notify is lost
+                        if (this->stop)
+                            return;
+                        
                         this->condition.wait(lock,
                             [this]{ return this->stop || !this->tasks.empty(); });
                         if(this->stop && this->tasks.empty())
