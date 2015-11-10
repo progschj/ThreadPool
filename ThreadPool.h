@@ -25,7 +25,7 @@ class ThreadPool final
 	 auto enqueue (F&& f, Args&&... args) 
 		-> std::future<typename std::result_of<F (Args...)>::type>;
 
-	// Enqueue task with checked return value
+	// Enqueue task without requiring a return value
 	 template<class F, class... Args>
 	 auto enqueueAndDetach (F&& f, Args&&... args) 
 		-> void;
