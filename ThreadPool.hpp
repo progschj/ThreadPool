@@ -30,13 +30,13 @@ class ThreadPool final
       ThreadPool& operator= (const ThreadPool &&) = delete;
 
       // Enqueue task and return std::future<>
-      template<class Callable, class... Args>
+      template<typename Callable, typename... Args>
       auto enqueue (Callable&& callable, Args&&... args) 
          -> std::future<typename std::result_of<Callable (Args...)>::type>;
 
       // Enqueue task without requiring capture of std::future<>
       // Note: Best not to let exceptions escape the callable
-      template<class Callable, class... Args>
+      template<typename Callable, typename... Args>
       auto enqueueAndDetach (Callable&& callable, Args&&... args) 
          -> void;
 
@@ -54,7 +54,7 @@ class ThreadPool final
 };
 
 // Add a new work item to the pool
-template<class Callable, class... Args>
+template<typename Callable, typename... Args>
 auto ThreadPool::enqueue (Callable&& callable, Args&&... args) 
    -> std::future<typename std::result_of<Callable (Args...)>::type>
 {
@@ -81,7 +81,7 @@ auto ThreadPool::enqueue (Callable&& callable, Args&&... args)
 }
 
 // Add a new work item to the pool
-template<class Callable, class... Args>
+template<typename Callable, typename... Args>
 auto ThreadPool::enqueueAndDetach (Callable&& callable, Args&&... args) 
    -> void
 {
