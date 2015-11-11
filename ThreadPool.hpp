@@ -34,7 +34,8 @@ class ThreadPool final
       auto enqueue (Callable&& callable, Args&&... args) 
          -> std::future<typename std::result_of<Callable (Args...)>::type>;
 
-      // Enqueue task without requiring an std::future<>
+      // Enqueue task without requiring capture of std::future<>
+      // Note: Best not to let exceptions escape the callable
       template<class Callable, class... Args>
       auto enqueueAndDetach (Callable&& callable, Args&&... args) 
          -> void;
