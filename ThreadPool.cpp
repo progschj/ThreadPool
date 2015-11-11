@@ -2,7 +2,7 @@
 
 // Based on https://github.com/progschj/ThreadPool
 
-#include "ThreadPool.h"
+#include "ThreadPool.hpp"
 
 ThreadPool::ThreadPool (size_t threads)
 {
