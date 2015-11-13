@@ -27,9 +27,9 @@ ThreadPool::ThreadPool (size_t threads)
                   return this->stop || !this->tasks.empty (); 
                });
 
-               // Exit the thread if stopping and no work remains
+               // If stopping and no work remains, exit the work loop and thread
                if (this->stop && this->tasks.empty ())
-                  return;
+                  break;
 
                // Dequeue the next task
                task = std::move (this->tasks.front ());
