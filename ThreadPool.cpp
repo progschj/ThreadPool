@@ -1,4 +1,4 @@
-// Purpose: Thread pool
+// Purpose: Simple thread pool
 
 // Based on https://github.com/progschj/ThreadPool
 
@@ -21,7 +21,7 @@ ThreadPool::ThreadPool (size_t threads)
             // Wait for additional work signal
             { // Critical section
                // Wait to be notified of work
-               Lock lock (this->queue_mutex);
+               lock_t lock (this->queue_mutex);
                this->condition.wait (lock, [this]()
                { 
                   return this->stop || !this->tasks.empty (); 
@@ -47,7 +47,7 @@ ThreadPool::ThreadPool (size_t threads)
 ThreadPool::~ThreadPool ()
 {
    { // Critical section
-      Lock lock (queue_mutex);
+      lock_t lock (queue_mutex);
       stop = true;
    } // End critical section
 

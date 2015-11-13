@@ -1,4 +1,4 @@
-// Purpose: Thread pool
+// Purpose: Simple thread pool
 
 // Based on https://github.com/progschj/ThreadPool
 
@@ -47,7 +47,7 @@ class ThreadPool final
       std::queue<std::function<void ()>> tasks;
  
       // Synchronization
-      using Lock = std::unique_lock<std::mutex>;
+      using lock_t = std::unique_lock<std::mutex>;
       std::mutex queue_mutex;
       std::condition_variable condition;
       bool stop = false;
@@ -65,7 +65,7 @@ auto ThreadPool::enqueue (Callable&& callable, Args&&... args)
    std::future<return_t> result = task->get_future();
 
    { // Critical section
-      Lock lock (queue_mutex);
+      lock_t lock (queue_mutex);
 
       // Don't allow an enqueue after stopping
       if (stop)
@@ -86,7 +86,7 @@ auto ThreadPool::enqueueAndDetach (Callable&& callable, Args&&... args)
    -> void
 {
    { // Critical section
-      Lock lock (queue_mutex);
+      lock_t lock (queue_mutex);
 
       // Don't allow an enqueue after stopping
       if (stop)
