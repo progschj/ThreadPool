@@ -56,6 +56,6 @@ ThreadPool::~ThreadPool ()
    // Wait for threads to complete work
    for (std::thread &worker : workers)
    {
-      if (worker.joinable ()) { worker.join(); }
+      worker.join();
    }
 }

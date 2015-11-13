@@ -18,7 +18,7 @@ class ThreadPool final
 {
    public:
       // Launches specified number of worker threads
-      ThreadPool (size_t threads);
+      ThreadPool (size_t threads = 1);
       ~ThreadPool ();
 
       // Not copyable
