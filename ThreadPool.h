@@ -36,6 +36,7 @@ private:
     // for recycle idle threads
     static thread_local bool working;
     std::atomic< int > maxIdle;
+    std::atomic< int > pendingStopSignal;
     std::thread monitor;
 };
 
@@ -46,6 +47,7 @@ inline ThreadPool::ThreadPool()
     :   stop(false), waiters(0)
 {
     maxIdle = std::max< int >(1, static_cast<int>(std::thread::hardware_concurrency()));
+    pendingStopSignal = 0;
     monitor = std::thread([this]() { this->recycle(); } );
 }
 
@@ -121,6 +123,7 @@ inline void ThreadPool::work()
     }
 
     // if reach here, this thread is recycled by monitor thread
+    -- pendingStopSignal;
 }
 
 inline void ThreadPool::recycle() 
@@ -134,11 +137,14 @@ inline void ThreadPool::recycle()
             return;
         
         auto nw = waiters;
+        // if there is any pending stop signal to consume waiters
+        nw -= pendingStopSignal;
         while (nw -- > maxIdle)
         {
             // the thread which fetch this task item will exit
             tasks.emplace([this]() { working = false; });
             condition.notify_one();
+            ++ pendingStopSignal;
         }
     }
 }
