@@ -1,17 +1,27 @@
-ThreadPool
-==========
+# ThreadPool
 
-A simple C++11 Thread Pool implementation.
+[![Build Status](https://travis-ci.org/WillBrennan/ThreadPool.svg?branch=master)](https://travis-ci.org/WillBrennan/ThreadPool)
 
-Basic usage:
+A simple C++ Thread Pool using std::thread and other C++11/14 functionality.
+
 ```c++
-// create thread pool with 4 worker threads
-ThreadPool pool(4);
+#include <iostream>
+#include <vector>
 
-// enqueue and store future
-auto result = pool.enqueue([](int answer) { return answer; }, 42);
+#include "thread_pool.h"
 
-// get result from future
-std::cout << result.get() << std::endl;
+int main(int argc, char** argv) {
+    ThreadPool pool;
+    std::vector<std::future<int>> results;
 
+    for (int i = 0; i < 8; ++i) {
+        results.emplace_back(pool.enqueue([](auto i) { return i * i; }, i));
+    }
+
+    for (auto&& result : results) {
+        std::cout << result.get() << std::endl;
+    }
+
+    return 0;
+}
 ```
