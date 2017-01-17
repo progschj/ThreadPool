@@ -1,0 +1,45 @@
+language: cpp
+
+dist: trusty
+sudo: required
+
+matrix:
+  include:
+    - os: linux
+      env: COMPILER=g++-6 CXX=g++-6 CC=gcc-6
+      before_script:
+        - base_dir=$PWD && mkdir travis_deps && cd travis_deps
+        - sudo apt-get update -qq
+        - git clone https://github.com/google/googletest.git gtest
+        - mkdir -p gtest/build && cd gtest/build && cmake ../ && make && sudo make install
+        - cd ${base_dir}
+      addons:
+        apt:
+          packages:
+            - g++-6
+            - libstdc++6
+          sources: &sources
+            - llvm-toolchain-precise-3.8
+            - ubuntu-toolchain-r-test
+    - os: linux
+      env: COMPILER=clang++-3.8 CXX=clang++-3.8 CC=clang-3.8
+      before_script:
+        - base_dir=$PWD && mkdir travis_deps && cd travis_deps
+        - sudo apt-get update -qq
+        - git clone https://github.com/google/googletest.git gtest
+        - mkdir -p gtest/build && cd gtest/build && cmake ../ && make && sudo make install
+        - cd ${base_dir}
+      addons:
+        apt:
+          sources: *sources
+          packages:
+            - clang-3.8
+            - g++-6
+            - libstdc++6
+
+script:
+  - uname -a
+  - $CXX --version
+  - mkdir build
+  - cd build
+  - cmake -DCMAKE_CXX_COMPILER=$COMPILER .. && make && make test

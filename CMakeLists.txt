@@ -16,10 +16,12 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libstdc++")
 endif ()
 
-find_package(glog   REQUIRED)
-find_package(gtest  REQUIRED)
+
+include_directories(/usr/lib)
+include_directories(/usr/local/lib)
 include_directories(${PROJECT_SOURCE_DIR})
 
+find_package(Threads)
 
 find_program(clang_format "clang-format")
 if(clang_format)
@@ -28,8 +30,15 @@ if(clang_format)
 endif()
 
 
-set(libraries       glog)
+set(libraries       ${CMAKE_THREAD_LIBS_INIT})
 set(test_libraries  ${libraries} gtest gmock)
 
-add_executable(example          example.cpp)
+add_executable(example          examples/example.cpp)
 target_link_libraries(example   ${libraries})
+
+file(GLOB_RECURSE all_cxx_test_files       ${PROJECT_SOURCE_DIR}/tests/*.cc)
+add_executable(test_thread_pool ${all_cxx_test_files})
+target_link_libraries(test_thread_pool     gtest gtest_main gmock ${libraries})
+add_test(test_thread_pool       test_thread_pool)
+
+enable_testing()
