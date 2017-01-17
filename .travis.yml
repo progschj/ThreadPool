@@ -13,7 +13,7 @@ before_script:
 matrix:
   include:
     - os: linux
-      env: CXX=g++-4.9 CC=gcc-4.8
+      env: COMPILER=g++-4.9 CXX=g++-4.9 CC=gcc-4.8
       addons:
         apt:
           packages:
@@ -22,17 +22,16 @@ matrix:
           sources: &sources
             - ubuntu-toolchain-r-test
     - os: linux
-      env: CXX=g++-5 CC=gcc-5
+      env: COMPILER=g++-5 CXX=g++-5 CC=gcc-5
       addons:
         apt:
           packages:
             - g++-5
             - libstdc++6
           sources: &sources
-            - llvm-toolchain-precise-3.8
             - ubuntu-toolchain-r-test
     - os: linux
-      env: CXX=g++-6 CC=gcc-6
+      env: COMPILER=g++-6 CXX=g++-6 CC=gcc-6
       addons:
         apt:
           packages:
@@ -41,26 +40,29 @@ matrix:
           sources: &sources
             - ubuntu-toolchain-r-test
     - os: linux
-      env: CXX=clang++-3.6 CC=clang-3.6
+      env: COMPILER=clang++-3.6 CXX=clang++-3.6 CC=clang-3.6
       addons:
         apt:
           sources: *sources
+            - llvm-toolchain-trusty-3.6
           packages:
             - clang-3.6
             - libstdc++6
     - os: linux
-      env: CXX=clang++-3.7 CC=clang-3.7
+      env: COMPILER=clang++-3.7 CXX=clang++-3.7 CC=clang-3.7
       addons:
         apt:
           sources: *sources
+            - llvm-toolchain-trusty-3.7
           packages:
             - clang-3.7
             - libstdc++6
     - os: linux
-      env: CXX=clang++-3.8 CC=clang-3.8
+      env: COMPILER=clang++-3.8 CXX=clang++-3.8 CC=clang-3.8
       addons:
         apt:
           sources: *sources
+            - llvm-toolchain-trusty-3.8
           packages:
             - clang-3.8
             - libstdc++6
@@ -70,4 +72,4 @@ script:
   - $CXX --version
   - mkdir build
   - cd build
-  - cmake .. && make && make test
+  - cmake -DCMAKE_CXX_COMPILER=$COMPILER .. && make && make test
