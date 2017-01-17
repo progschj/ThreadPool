@@ -8,7 +8,7 @@ int main(int argc, char** argv) {
     std::vector<std::future<int>> results;
 
     for (int i = 0; i < 8; ++i) {
-        results.emplace_back(pool.enqueue([](auto i) { return i * i; }, i));
+        results.emplace_back(pool.enqueue([](int i) { return i * i; }, i));
     }
 
     for (auto&& result : results) {

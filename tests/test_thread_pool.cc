@@ -41,7 +41,7 @@ TEST(ThreadPool, EnqueueExample) {
     std::vector<std::future<int>> results_int;
     results_int.reserve(12);
     for (auto i = 0; i < 12; ++i) {
-        results_int.emplace_back(pool.enqueue([](auto i) { return i * i; }, i));
+        results_int.emplace_back(pool.enqueue([](int i) { return i * i; }, i));
     }
 
     auto sum = 0;
