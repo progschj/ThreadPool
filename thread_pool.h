@@ -42,7 +42,7 @@ inline ThreadPool::ThreadPool(Index n_threads) : stop_(false) {
         throw std::runtime_error("error! invalid number of threads");
     }
 
-    for (auto i = 0; i < n_threads; ++i)
+    for (Index i=0; i < n_threads; ++i)
         workers_.emplace_back([this] {
             while (true) {
                 Task task;
