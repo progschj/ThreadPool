@@ -23,8 +23,8 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
 
-include_directories(/usr/lib)
-include_directories(/usr/local/lib)
+link_directories(/usr/lib)
+link_directories(/usr/local/lib)
 include_directories(${PROJECT_SOURCE_DIR})
 
 find_package(Threads)
