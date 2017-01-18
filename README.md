@@ -6,12 +6,12 @@ A simple C++ Thread Pool using std::thread and other C++11 functionality.
 
 This is a fork of [ThreadPool](https://github.com/progschj/ThreadPool) but a few extra features.
 
-
 ## Features
 * must be explicitly constructed (no copy, assign, move, or move-assign construction)
 * added more checks
 * added tests!
 * CMakeLists for both Clang and GCC
+* added a wide range of compilers and platforms to CI.
 
 ## Example
 
@@ -46,7 +46,7 @@ cmake ../ && make && sudo make install
 ```
 
 ## Tests
-[Google Test](https://github.com/google/googletest) must be installed to build the tests, tests are not build by default
+[Google Test](https://github.com/google/googletest) must be installed to built the tests, tests are not build by default
 due to install requirements. To run the tests;
 
 ```bash
