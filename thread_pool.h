@@ -55,6 +55,7 @@ inline ThreadPool::ThreadPool(Index n_threads) : stop_(false) {
                     }
                     task = std::move(tasks_.front());
                     tasks_.pop();
+                    lock.unlock();
                 }
 
                 task();
@@ -78,6 +79,7 @@ std::future<typename std::result_of<Fn(Args...)>::type> ThreadPool::enqueue(Fn&&
         }
 
         tasks_.emplace([task]() { (*task)(); });
+        lock.unlock();
     }
     condition_.notify_one();
     return res;
