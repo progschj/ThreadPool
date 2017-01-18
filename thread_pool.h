@@ -23,8 +23,8 @@ class ThreadPool {
     ThreadPool(ThreadPool&&) = delete;
     ThreadPool& operator=(const ThreadPool&&) = delete;
 
-    template <class F, class... Args>
-    std::future<typename std::result_of<F(Args...)>::type> enqueue(F&& f, Args&&... args);
+    template <class Fn, class... Args>
+    std::future<typename std::result_of<Fn(Args...)>::type> enqueue(Fn&& f, Args&&... args);
 
   private:
     using Task = std::function<void()>;
@@ -62,12 +62,12 @@ inline ThreadPool::ThreadPool(Index n_threads) : stop_(false) {
         });
 }
 
-template <class F, class... Args>
-std::future<typename std::result_of<F(Args...)>::type> ThreadPool::enqueue(F&& f, Args&&... args) {
-    using return_type = typename std::result_of<F(Args...)>::type;
+template <class Fn, class... Args>
+std::future<typename std::result_of<Fn(Args...)>::type> ThreadPool::enqueue(Fn&& func, Args&&... args) {
+    using return_type = typename std::result_of<Fn(Args...)>::type;
     using packaged_task = std::packaged_task<return_type()>;
 
-    auto task = std::make_shared<packaged_task>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+    auto task = std::make_shared<packaged_task>(std::bind(std::forward<Fn>(func), std::forward<Args>(args)...));
 
     std::future<return_type> res = task->get_future();
     {
