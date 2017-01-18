@@ -13,7 +13,9 @@
 
 class ThreadPool {
   public:
-    ThreadPool(unsigned int n_threads = std::thread::hardware_concurrency());
+    using Index = unsigned int;
+
+    ThreadPool(Index n_threads = std::thread::hardware_concurrency());
     ~ThreadPool() noexcept;
 
     ThreadPool(const ThreadPool&) = delete;
@@ -22,38 +24,38 @@ class ThreadPool {
     ThreadPool& operator=(const ThreadPool&&) = delete;
 
     template <class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>;
+    std::future<typename std::result_of<F(Args...)>::type> enqueue(F&& f, Args&&... args);
 
   private:
-    // need to keep track of threads so we can join them
-    std::vector<std::thread> workers;
-    // the task queue
-    std::queue<std::function<void()> > tasks;
+    using Task = std::function<void()>;
+    
+    std::vector<std::thread> workers_;
+    std::queue<Task> tasks_;
 
-    // synchronization
-    std::mutex queue_mutex;
-    std::condition_variable condition;
-    bool stop;
+    std::mutex queue_mutex_;
+    std::condition_variable condition_;
+    bool stop_;
 };
 
-// the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(unsigned int n_threads) : stop(false) {
+
+inline ThreadPool::ThreadPool(Index n_threads) : stop_(false) {
     if (n_threads == 0 || n_threads > std::thread::hardware_concurrency()) {
         throw std::runtime_error("error! invalid number of threads");
     }
 
     for (size_t i = 0; i < n_threads; ++i)
-        workers.emplace_back([this] {
-            for (;;) {
-                std::function<void()> task;
+        workers_.emplace_back([this] {
+            while (true) {
+                Task task;
 
                 {
-                    std::unique_lock<std::mutex> lock(this->queue_mutex);
-                    this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
-                    if (this->stop && this->tasks.empty())
+                    std::unique_lock<std::mutex> lock(queue_mutex_);
+                    condition_.wait(lock, [this] { return stop_ || !tasks_.empty(); });
+                    if (stop_ && tasks_.empty()) {
                         return;
-                    task = std::move(this->tasks.front());
-                    this->tasks.pop();
+                    }
+                    task = std::move(tasks_.front());
+                    tasks_.pop();
                 }
 
                 task();
@@ -61,9 +63,9 @@ inline ThreadPool::ThreadPool(unsigned int n_threads) : stop(false) {
         });
 }
 
-// add new work item to the pool
+
 template <class F, class... Args>
-auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type> {
+std::future<typename std::result_of<F(Args...)>::type> ThreadPool::enqueue(F&& f, Args&&... args) {
     using return_type = typename std::result_of<F(Args...)>::type;
 
     auto task = std::make_shared<std::packaged_task<return_type()> >(
@@ -71,27 +73,28 @@ auto ThreadPool::enqueue(F&& f, Args&&... args) -> std::future<typename std::res
 
     std::future<return_type> res = task->get_future();
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);
+        std::unique_lock<std::mutex> lock(queue_mutex_);
 
-        // don't allow enqueueing after stopping the pool
-        if (stop)
-            throw std::runtime_error("enqueue on stopped ThreadPool");
+        if (stop_) {
+            throw std::runtime_error("error! enqueue on stopped ThreadPool");
+        }
 
-        tasks.emplace([task]() { (*task)(); });
+        tasks_.emplace([task]() { (*task)(); });
     }
-    condition.notify_one();
+    condition_.notify_one();
     return res;
 }
 
-// the destructor joins all threads
+
 inline ThreadPool::~ThreadPool() noexcept {
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        stop_ = true;
     }
-    condition.notify_all();
-    for (std::thread& worker : workers)
+    condition_.notify_all();
+    for (std::thread& worker : workers_) {
         worker.join();
+    }
 }
 
 #endif /* THREAD_POOL_H_ */
