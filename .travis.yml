@@ -72,4 +72,4 @@ script:
   - $CXX --version
   - mkdir build
   - cd build
-  - cmake -DCMAKE_CXX_COMPILER=$COMPILER .. && make && make test
+  - cmake -Dtests=ON -DCMAKE_CXX_COMPILER=$COMPILER .. && make && make test

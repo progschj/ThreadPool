@@ -37,14 +37,17 @@ endif()
 
 
 set(libraries       ${CMAKE_THREAD_LIBS_INIT})
-set(test_libraries  ${libraries} gtest gmock)
 
 add_executable(example          examples/example.cc)
 target_link_libraries(example   ${libraries})
 
-file(GLOB_RECURSE all_cxx_test_files       ${PROJECT_SOURCE_DIR}/tests/*.cc)
-add_executable(test_thread_pool ${all_cxx_test_files})
-target_link_libraries(test_thread_pool     gtest gtest_main gmock ${libraries})
-add_test(test_thread_pool       test_thread_pool)
+if (tests)
+    set(test_libraries  ${libraries} gtest gmock)
+
+    file(GLOB_RECURSE all_cxx_test_files       ${PROJECT_SOURCE_DIR}/tests/*.cc)
+    add_executable(test_thread_pool ${all_cxx_test_files})
+    target_link_libraries(test_thread_pool     gtest gtest_main gmock ${libraries})
+    add_test(test_thread_pool       test_thread_pool)
+endif ()
 
 enable_testing()
