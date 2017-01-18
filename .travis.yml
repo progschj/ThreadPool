@@ -70,6 +70,9 @@ matrix:
 
     - os: osx
       osx_image: xcode8.1
+      before_install:
+       - brew update
+       - brew install cmake || brew upgrade cmake
 
     - os: osx
       osx_image: xcode8.2
