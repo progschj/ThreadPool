@@ -1,18 +1,19 @@
+//
 // Purpose: Simple thread pool
-
-// Based on https://github.com/progschj/ThreadPool
+//
+// Based on https://github.com/progschj/ThreadPool changes provided as https://github.com/calthron/ThreadPool
 
 #pragma once
 
-#include <vector>
-#include <queue>
-#include <memory>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
-#include <future>
 #include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 class ThreadPool final
 {
@@ -34,18 +35,12 @@ class ThreadPool final
       auto enqueue (Callable&& callable, Args&&... args) 
          -> std::future<typename std::result_of<Callable (Args...)>::type>;
 
-      // Enqueue task without requiring capture of std::future<>
-      // Note: Best not to let exceptions escape the callable
-      template<typename Callable, typename... Args>
-      auto enqueueAndDetach (Callable&& callable, Args&&... args) 
-         -> void;
-
    private:
       // Keep track of threads, so they can be joined
       std::vector<std::thread> workers;
       // Task queue
       std::queue<std::function<void ()>> tasks;
- 
+
       // Synchronization
       using lock_t = std::unique_lock<std::mutex>;
       std::mutex queue_mutex;
@@ -53,7 +48,7 @@ class ThreadPool final
       bool stop = false;
 };
 
-// Add a new work item to the pool
+// Add a new work item to the pool, return std::future of return type
 template<typename Callable, typename... Args>
 auto ThreadPool::enqueue (Callable&& callable, Args&&... args) 
    -> std::future<typename std::result_of<Callable (Args...)>::type>
@@ -79,24 +74,3 @@ auto ThreadPool::enqueue (Callable&& callable, Args&&... args)
    condition.notify_one ();
    return result;
 }
-
-// Add a new work item to the pool
-template<typename Callable, typename... Args>
-auto ThreadPool::enqueueAndDetach (Callable&& callable, Args&&... args) 
-   -> void
-{
-   { // Critical section
-      lock_t lock (queue_mutex);
-
-      // Don't allow an enqueue after stopping
-      if (stop)
-         throw std::runtime_error ("enqueue on stopped ThreadPool");
-
-      // Push work back on the queue
-      tasks.emplace (std::bind (std::forward<Callable> (callable), std::forward<Args> (args)...));
-   } // End critical section
-
-   // Notify a thread that there is new work to perform
-   condition.notify_one ();
-}
-

@@ -1,6 +1,7 @@
+//
 // Purpose: Simple thread pool
-
-// Based on https://github.com/progschj/ThreadPool
+//
+// Based on https://github.com/progschj/ThreadPool changes provided as https://github.com/calthron/ThreadPool
 
 #include "ThreadPool.hpp"
 
@@ -19,22 +20,22 @@ ThreadPool::ThreadPool (size_t threads)
             std::function<void ()> task;
 
             // Wait for additional work signal
-            { // Critical section
+            { // CRITICAL SECTION
                // Wait to be notified of work
-               lock_t lock (this->queue_mutex);
-               this->condition.wait (lock, [this]()
+               lock_t lock (queue_mutex);
+               condition.wait (lock, [this]()
                { 
-                  return this->stop || !this->tasks.empty (); 
+                  return stop || !tasks.empty (); 
                });
 
-               // If stopping and no work remains, exit the work loop and thread
-               if (this->stop && this->tasks.empty ())
+               // If stopping and no work remains, exit the work loop
+               if (stop && tasks.empty ())
                   break;
 
                // Dequeue the next task
-               task = std::move (this->tasks.front ());
-               this->tasks.pop ();
-            } // End critical section
+               task.swap (tasks.front ());
+               tasks.pop ();
+            } // END CRITICAL SECTION
 
             // Execute
             task ();
