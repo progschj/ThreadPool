@@ -46,13 +46,13 @@ cmake ../ && make && sudo make install
 ```
 
 ## Tests
-[Google Test](https://github.com/google/googletest) must be installed to built the tests, tests are not build by default
-due to install requirements. To run the tests;
+[Google Test](https://github.com/google/googletest) must be installed to built the tests, if Gtest is found then the
+ tests are built, to run the tests;
 
 ```bash
 git clone https://github.com/WillBrennan/ThreadPool
 mkdir -p ThreadPool/build && cd ThreadPool/build
-cmake -Dtests=ON ../ && make && make test
+cmake ../ && make && make test
 ```
 
 ## Clang-Format
