@@ -1,17 +1,59 @@
-ThreadPool
-==========
+# ThreadPool
 
-A simple C++11 Thread Pool implementation.
+[![Build Status](https://travis-ci.org/WillBrennan/ThreadPool.svg?branch=master)](https://travis-ci.org/WillBrennan/ThreadPool)
 
-Basic usage:
+A simple C++ Thread Pool using std::thread and other C++11 functionality.
+
+This is a fork of [ThreadPool](https://github.com/progschj/ThreadPool) but a few extra features.
+
+## Features
+* must be explicitly constructed (no copy, assign, move, or move-assign construction)
+* added more checks
+* added tests!
+* CMakeLists for both Clang and GCC
+* added a wide range of compilers and platforms to CI.
+
+## Example
+
 ```c++
-// create thread pool with 4 worker threads
-ThreadPool pool(4);
+#include <iostream>
+#include <vector>
 
-// enqueue and store future
-auto result = pool.enqueue([](int answer) { return answer; }, 42);
+#include "thread_pool.h"
 
-// get result from future
-std::cout << result.get() << std::endl;
+int main(int argc, char** argv) {
+    ThreadPool pool;
+    std::vector<std::future<int>> results;
 
+    for (int i = 0; i < 8; ++i) {
+        results.emplace_back(pool.enqueue([](int i) { return i * i; }, i));
+    }
+
+    for (auto&& result : results) {
+        std::cout << result.get() << std::endl;
+    }
+
+    return 0;
+}
 ```
+
+## Getting Started
+
+```bash
+git clone https://github.com/WillBrennan/ThreadPool
+mkdir -p ThreadPool/build && cd ThreadPool/build
+cmake ../ && make && sudo make install
+```
+
+## Tests
+[Google Test](https://github.com/google/googletest) must be installed to built the tests, if Gtest is found then the
+ tests are built, to run the tests;
+
+```bash
+git clone https://github.com/WillBrennan/ThreadPool
+mkdir -p ThreadPool/build && cd ThreadPool/build
+cmake ../ && make && make test
+```
+
+## Clang-Format
+Project uses clang-format, call `make clang-format` before submitting a pull request.
