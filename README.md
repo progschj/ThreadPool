@@ -1,7 +1,7 @@
 ThreadPool
 ==========
+C++11 简易线程池测试
 
-A simple C++11 Thread Pool implementation.
 
 Basic usage:
 ```c++
