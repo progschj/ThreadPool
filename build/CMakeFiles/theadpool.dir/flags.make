@@ -6,5 +6,5 @@ CXX_FLAGS =   -Wall -std=c++11 -g
 
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/root/TestThreadPool/ThreadPool/. 
+CXX_INCLUDES = -I/root/ThreadPool/. 
 

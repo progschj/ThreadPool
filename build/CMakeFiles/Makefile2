@@ -54,10 +54,10 @@ RM = /usr/bin/cmake -E remove -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /root/TestThreadPool/ThreadPool
+CMAKE_SOURCE_DIR = /root/ThreadPool
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /root/TestThreadPool/ThreadPool/build
+CMAKE_BINARY_DIR = /root/ThreadPool/build
 
 #=============================================================================
 # Target rules for target CMakeFiles/theadpool.dir
@@ -66,7 +66,7 @@ CMAKE_BINARY_DIR = /root/TestThreadPool/ThreadPool/build
 CMakeFiles/theadpool.dir/all:
 	$(MAKE) -f CMakeFiles/theadpool.dir/build.make CMakeFiles/theadpool.dir/depend
 	$(MAKE) -f CMakeFiles/theadpool.dir/build.make CMakeFiles/theadpool.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/root/TestThreadPool/ThreadPool/build/CMakeFiles --progress-num=1,2 "Built target theadpool"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/root/ThreadPool/build/CMakeFiles --progress-num=1,2 "Built target theadpool"
 .PHONY : CMakeFiles/theadpool.dir/all
 
 # Include target in all.
@@ -76,9 +76,9 @@ all: CMakeFiles/theadpool.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/theadpool.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /root/TestThreadPool/ThreadPool/build/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/ThreadPool/build/CMakeFiles 2
 	$(MAKE) -f CMakeFiles/Makefile2 CMakeFiles/theadpool.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /root/TestThreadPool/ThreadPool/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/ThreadPool/build/CMakeFiles 0
 .PHONY : CMakeFiles/theadpool.dir/rule
 
 # Convenience name for target.

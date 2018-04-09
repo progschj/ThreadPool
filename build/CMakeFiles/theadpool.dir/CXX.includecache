@@ -6,7 +6,7 @@
 
 #IncludeRegexTransform: 
 
-/root/TestThreadPool/ThreadPool/ThreadPool.h
+/root/ThreadPool/ThreadPool.h
 vector
 -
 queue
@@ -26,13 +26,13 @@ functional
 stdexcept
 -
 
-/root/TestThreadPool/ThreadPool/example.cpp
+/root/ThreadPool/example.cpp
+ThreadPool.h
+/root/ThreadPool/ThreadPool.h
 iostream
 -
 vector
 -
 chrono
 -
-ThreadPool.h
-/root/TestThreadPool/ThreadPool/ThreadPool.h
 
