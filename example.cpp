@@ -4,7 +4,8 @@
 
 #include "ThreadPool.h"
 
-void example()
+#ifdef EXECUTE_THREADPOOL_EXAMPLE
+int main()
 {
     
     ThreadPool pool(4);
@@ -24,4 +25,7 @@ void example()
     for(auto && result: results)
         std::cout << result.get() << ' ';
     std::cout << std::endl;
+    
+    return 0;
 }
+#endif
