@@ -29,9 +29,6 @@ public:
     void Enqueue(F&& f, Args&&... args);
 
 private:
-    // noncopyable
-    ThreadPool(const ThreadPool&) = delete;
-    void operator=(const ThreadPool&) = delete;
 
     void ThreadRun(bool expanded);
 
@@ -58,12 +55,14 @@ inline ThreadPool::ThreadPool(size_t threads)
 
 }
 
+// the constructor just launches some amount of workers to init a pool.
 inline ThreadPool::ThreadPool(size_t threadsInit, size_t threadsMax)
     : threadsInit_(threadsInit > 0 ? threadsInit : 1)
     , threadsMax_(threadsMax > threadsInit_ ? threadsMax : 0)
     , threadsIdle_(0)
     , quit_(false)
 {
+    // init the fixed number of threads.
     for (size_t i = 0; i < threadsInit_; ++i)
         workers_.emplace_back(&ThreadPool::ThreadRun, this, false);
 }
@@ -88,6 +87,7 @@ auto ThreadPool::Schedule(F&& f, Args&&... args)
 {
     using return_type = typename std::result_of<F(Args...)>::type;
 
+    // package the function and arguments to a task object.
     auto task = std::make_shared< std::packaged_task<return_type()> >(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
@@ -96,10 +96,15 @@ auto ThreadPool::Schedule(F&& f, Args&&... args)
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
+
         // don't allow scheduling after stopping the pool
         if (quit_)
             throw std::runtime_error("Schedule on stopped ThreadPool");
+
+        // enqueue the task.
         tasks_.emplace([task]() { (*task)(); });
+
+        // no idles, start a new one to expand the pool.
         assert(threadsIdle_ >= 0);
         if (threadsIdle_ == 0 && workers_.size() < threadsMax_)
             workers_.emplace_back(&ThreadPool::ThreadRun, this, true);
@@ -111,13 +116,14 @@ auto ThreadPool::Schedule(F&& f, Args&&... args)
 template<class F, class... Args>
 void ThreadPool::Enqueue(F&& f, Args&&... args)
 {
+    // enqueue task without the future of results.
     auto task = std::make_shared< std::packaged_task<void()> >(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (quit_)
-            return;
+            return; // no throws.
         tasks_.emplace([task]() { (*task)(); });
         assert(threadsIdle_ >= 0);
         if (threadsIdle_ == 0 && workers_.size() < threadsMax_)
@@ -133,15 +139,19 @@ inline void ThreadPool::ThreadRun(bool expanded)
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mutex_);
+
+            // increase the idle count
             ++threadsIdle_;
-            SCOPE_EXIT([this] { --threadsIdle_; });
-            if (!expanded)
+            // and reset the count on exit this scope.
+            ON_SCOPE_EXIT([this] { --threadsIdle_; });
+
+            if (!expanded)  // the initialized threads, just wait forever.
                 condition_.wait(lock,
                     [this] { return quit_ || !tasks_.empty(); });
-            else if (!condition_.wait_for(lock, std::chrono::minutes(1),
+            else if (!condition_.wait_for(lock, std::chrono::minutes(1),    // the expanded threads, wait for 1 minute idle and quit.
                     [this] { return quit_ || !tasks_.empty(); }))
             {
-                // cleanup self thread info.
+                // remove thread object of self on quit.
                 auto it = std::find_if(workers_.begin(), workers_.end(),
                     [](const std::thread& th) { return th.get_id() ==
                     std::this_thread::get_id(); });
@@ -153,6 +163,7 @@ inline void ThreadPool::ThreadRun(bool expanded)
                 return;
             }
 
+            // check and get a task object.
             if (quit_ && tasks_.empty())
                 return;
             task = std::move(tasks_.front());
