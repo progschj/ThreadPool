@@ -30,6 +30,12 @@ public:
 
 private:
 
+    // no default constructor
+    ThreadPool() = delete;
+    // noncopyable
+    ThreadPool(const ThreadPool&) = delete;
+    void operator=(const ThreadPool&) = delete;
+
     void ThreadRun(bool expanded);
 
     const size_t threadsInit_;
