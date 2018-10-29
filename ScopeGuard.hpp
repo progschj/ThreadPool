@@ -23,7 +23,9 @@ public:
 	}
 
 private:
+    // no default constructor
     ScopeGuard() = delete;
+    // noncopyable
     ScopeGuard(const ScopeGuard&) = delete;
     ScopeGuard& operator=(const ScopeGuard&) = delete;
 

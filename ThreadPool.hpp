@@ -29,7 +29,6 @@ public:
     void Enqueue(F&& f, Args&&... args);
 
 private:
-
     // no default constructor
     ThreadPool() = delete;
     // noncopyable
