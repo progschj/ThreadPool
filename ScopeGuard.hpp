@@ -5,39 +5,44 @@
 class ScopeGuard
 {
 public:
-    explicit ScopeGuard(std::function<void()> const& callOnExit)
-	: function_(callOnExit)
-	, disabled_(false)
-	{
-	}
+	explicit ScopeGuard(std::function<void()> const& call_on_exit);
+	~ScopeGuard();
 
-	~ScopeGuard()
-	{
-		if(!disabled_ && function_)
-            function_();
-	}
-
-	void Disable()
-	{
-        disabled_ = true;
-	}
+	void Disable();
 
 private:
     // no default constructor
     ScopeGuard() = delete;
-    // noncopyable
+
+	// noncopyable
     ScopeGuard(const ScopeGuard&) = delete;
-    ScopeGuard& operator=(const ScopeGuard&) = delete;
+    void operator=(const ScopeGuard&) = delete;
 
     std::function<void()> const function_;
     bool disabled_;
 };
 
-#define SCOPEGUARD_CAT(a, b) a##b
-#define SCOPEGUARD_MAKENAME(prefix, suffix) SCOPEGUARD_CAT(prefix, suffix)
+ScopeGuard::ScopeGuard(std::function<void()> const& call_on_exit)
+	: function_(call_on_exit)
+	, disabled_(false)
+{
 
-#define ON_SCOPE_EXIT(func) \
-ScopeGuard SCOPEGUARD_MAKENAME(scopeExit, __LINE__)(func)
+}
 
-// Anonymous declaration. TODO: need test on more compilers.
-#define SCOPE_EXIT(lambda) (ScopeGuard)(lambda)
+ScopeGuard::~ScopeGuard()
+{
+	if (!disabled_ && function_)
+		function_();
+}
+
+void ScopeGuard::Disable()
+{
+	disabled_ = true;
+}
+
+
+#define SCOPEGUARD_CAT4(s, a, b, c) a##s##b##s##c
+#define SCOPEGUARD_MAKENAME(prefix, infix, suffix) SCOPEGUARD_CAT4(_, prefix, infix, suffix)
+
+#define ON_SCOPE_EXIT(func_or_lambda) \
+ScopeGuard SCOPEGUARD_MAKENAME(__scope_exit, __LINE__, __COUNTER__)(func_or_lambda)
