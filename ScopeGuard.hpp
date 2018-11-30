@@ -5,16 +5,16 @@
 class ScopeGuard
 {
 public:
-	explicit ScopeGuard(std::function<void()> const& call_on_exit);
-	~ScopeGuard();
+    explicit ScopeGuard(std::function<void()> const& call_on_exit);
+    ~ScopeGuard();
 
-	void Disable();
+    void Disable();
 
 private:
     // no default constructor
     ScopeGuard() = delete;
 
-	// noncopyable
+    // noncopyable
     ScopeGuard(const ScopeGuard&) = delete;
     void operator=(const ScopeGuard&) = delete;
 
@@ -22,22 +22,22 @@ private:
     bool disabled_;
 };
 
-ScopeGuard::ScopeGuard(std::function<void()> const& call_on_exit)
-	: function_(call_on_exit)
-	, disabled_(false)
+inline ScopeGuard::ScopeGuard(std::function<void()> const& call_on_exit)
+    : function_(call_on_exit)
+    , disabled_(false)
 {
 
 }
 
-ScopeGuard::~ScopeGuard()
+inline ScopeGuard::~ScopeGuard()
 {
-	if (!disabled_ && function_)
-		function_();
+    if (!disabled_ && function_)
+        function_();
 }
 
-void ScopeGuard::Disable()
+inline void ScopeGuard::Disable()
 {
-	disabled_ = true;
+    disabled_ = true;
 }
 
 
