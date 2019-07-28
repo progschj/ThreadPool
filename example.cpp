@@ -2,15 +2,18 @@
 #include <vector>
 #include <chrono>
 
-#include "ThreadPool.h"
+#include "ThreadPool.hpp"
 
 int main()
 {
-    
-    ThreadPool pool(4);
-    std::vector< std::future<int> > results;
+    const size_t ThreadNum = 4;
+    const size_t TaskNum = 8;
 
-    for(int i = 0; i < 8; ++i) {
+    ThreadPool pool(ThreadNum);
+    std::vector< std::future<int> > results;
+    results.reserve(TaskNum);
+
+    for(int i = 0; i < TaskNum; ++i) {
         results.emplace_back(
             pool.enqueue([i] {
                 std::cout << "hello " << i << std::endl;
