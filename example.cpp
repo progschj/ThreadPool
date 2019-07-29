@@ -24,6 +24,18 @@ int main()
     for(auto && result: results)
         std::cout << result.get() << ' ';
     std::cout << std::endl;
-    
+
+    // test params
+    int value1 = 1;
+    int value2 = 1;
+    int value = pool.enqueue([](int v1, int& v2){
+        ++v1;
+        ++v2;
+        return v1 + v2;
+    }, value1, value2).get();
+    std::cout << "value1:" << value1 << std::endl;  // 1
+    std::cout << "value2:" << value2 << std::endl;  // 2
+    std::cout << "value:"  << value  << std::endl;  // 4
+
     return 0;
 }
