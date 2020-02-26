@@ -10,7 +10,7 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
-
+constexpr size_t maxQueueSize = 100;
 class ThreadPool {
 public:
     ThreadPool(size_t);
@@ -19,14 +19,14 @@ public:
     decltype(auto) enqueue(F&& f, Args&&... args);
 
     ~ThreadPool();
+    
 private:
-    // need to keep track of threads so we can join them
-    std::vector< std::thread > workers;
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
     void newWorker();
-    // the task queue
-    std::queue< std::function<void()> > tasks;
 
-    // synchronization
+    std::condition_variable tasks_full_flag;    //block enqueue if tasks queue is full
+    // synchronization (task queue <-> workers)
     std::mutex queue_mutex;
     std::condition_variable condition;
     bool stop = false;
@@ -58,6 +58,9 @@ decltype(auto) ThreadPool::enqueue(F&& f, Args&&... args)
         if (stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
 
+        if (tasks.size() >= maxQueueSize)
+            tasks_full_flag.wait(lock, [&]() {return tasks.size() < maxQueueSize; });
+
         tasks.emplace([task]() { (*task)(); });
     }
     condition.notify_one();
@@ -78,19 +81,21 @@ inline ThreadPool::~ThreadPool()
 
 inline void ThreadPool::newWorker()
 {
+    auto& flag = tasks_full_flag;
     workers.emplace_back(
-        [this]
+        [this, &flag]
         {
             for (;;)
             {
                 std::function<void()> task;
                 {
                     std::unique_lock<std::mutex> lock(this->queue_mutex);
-                    this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
+                    this->condition.wait(lock, [&] { return this->stop || !this->tasks.empty(); });
                     if (this->stop && this->tasks.empty())
                         return;
                     task = std::move(this->tasks.front());
                     this->tasks.pop();
+                    flag.notify_one();
                 }
                 task();
             }
