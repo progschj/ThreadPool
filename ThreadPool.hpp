@@ -9,13 +9,12 @@
 #include <future>
 #include <cassert>
 #include <stdexcept>
+#include <algorithm>
 #include <functional>
 #include <condition_variable>
-#include "ScopeGuard.hpp"
 
 
-class ThreadPool
-{
+class ThreadPool {
 public:
     explicit ThreadPool(size_t);
     ThreadPool(size_t, size_t);
@@ -23,7 +22,7 @@ public:
 
     template<class F, class... Args>
     auto Schedule(F&& f, Args&&... args)
-        ->std::future<typename std::result_of<F(Args...)>::type>;
+        -> std::future<typename std::result_of<F(Args...)>::type>;
 
     template<class F, class... Args>
     void Enqueue(F&& f, Args&&... args);
@@ -55,26 +54,21 @@ private:
 // the constructor set threadsMax to zero,
 // to create a static size threadpool.
 inline ThreadPool::ThreadPool(size_t threads)
-    : ThreadPool(threads, 0)
-{
-
-}
+: ThreadPool(threads, 0) {}
 
 // the constructor just launches some amount of workers to init a pool.
 inline ThreadPool::ThreadPool(size_t threadsInit, size_t threadsMax)
-    : threadsInit_(threadsInit > 0 ? threadsInit : 1)
-    , threadsMax_(threadsMax > threadsInit_ ? threadsMax : 0)
-    , threadsIdle_(0)
-    , quit_(false)
-{
+: threadsInit_(threadsInit > 0 ? threadsInit : 1)
+, threadsMax_(threadsMax > threadsInit_ ? threadsMax : 0)
+, threadsIdle_(0)
+, quit_(false) {
     // init the fixed number of threads.
     for (size_t i = 0; i < threadsInit_; ++i)
         workers_.emplace_back(&ThreadPool::ThreadRun, this, false);
 }
 
 // the destructor joins all threads
-inline ThreadPool::~ThreadPool()
-{
+inline ThreadPool::~ThreadPool() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         quit_ = true;
@@ -88,8 +82,7 @@ inline ThreadPool::~ThreadPool()
 // add new work item to the pool
 template<class F, class... Args>
 auto ThreadPool::Schedule(F&& f, Args&&... args)
--> std::future<typename std::result_of<F(Args...)>::type>
-{
+-> std::future<typename std::result_of<F(Args...)>::type> {
     using return_type = typename std::result_of<F(Args...)>::type;
 
     // package the function and arguments to a task object.
@@ -119,8 +112,7 @@ auto ThreadPool::Schedule(F&& f, Args&&... args)
 }
 
 template<class F, class... Args>
-void ThreadPool::Enqueue(F&& f, Args&&... args)
-{
+void ThreadPool::Enqueue(F&& f, Args&&... args) {
     // enqueue task without the future of results.
     auto task = std::make_shared< std::packaged_task<void()> >(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)
@@ -137,40 +129,46 @@ void ThreadPool::Enqueue(F&& f, Args&&... args)
     condition_.notify_one();
 }
 
-inline void ThreadPool::ThreadRun(bool expanded)
-{
-    for (;;)
-    {
+inline void ThreadPool::ThreadRun(bool expanded) {
+    for (;;) {
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mutex_);
-
             // increase the idle count
             ++threadsIdle_;
-            // and reset the count on exit this scope.
-            ON_SCOPE_EXIT([this] { --threadsIdle_; });
 
-            if (!expanded)  // the initialized threads, just wait forever.
-                condition_.wait(lock,
-                    [this] { return quit_ || !tasks_.empty(); });
-            else if (!condition_.wait_for(lock, std::chrono::minutes(1),    // the expanded threads, wait for 1 minute idle and quit.
-                    [this] { return quit_ || !tasks_.empty(); }))
-            {
-                // remove thread object of self on quit.
-                auto it = std::find_if(workers_.begin(), workers_.end(),
-                    [](const std::thread& th) { return th.get_id() ==
-                    std::this_thread::get_id(); });
-                if (it != workers_.end())
-                {
-                    it->detach();
-                    workers_.erase(it);
+            if (!expanded) {
+                // the initialized threads, just wait forever.
+                condition_.wait(lock, [this] {
+                    return quit_ || !tasks_.empty();
+                });
+                --threadsIdle_;
+            }
+            else {
+                // the expanded threads, wait for 1 minute idle and quit.
+                auto waitResult = condition_.wait_for(lock,
+                    std::chrono::minutes(1), [this] {
+                        return quit_ || !tasks_.empty();
+                    });
+                --threadsIdle_;
+
+                if (!waitResult) {
+                    // remove thread object of self on quit.
+                    auto it = std::find_if(workers_.begin(), workers_.end(), [](const std::thread& th) {
+                        return th.get_id() == std::this_thread::get_id();
+                    });
+                    if (it != workers_.end()) {
+                        it->detach();
+                        workers_.erase(it);
+                    }
+                    return;
                 }
-                return;
             }
 
             // check and get a task object.
             if (quit_ && tasks_.empty())
                 return;
+
             task = std::move(tasks_.front());
             tasks_.pop();
         }
