@@ -1,14 +1,13 @@
 #pragma once
-
+#include <cassert>
 #include <atomic>
 #include <vector>
+#include <list>
 #include <queue>
 #include <memory>
 #include <thread>
 #include <mutex>
 #include <future>
-#include <cassert>
-#include <stdexcept>
 #include <algorithm>
 #include <functional>
 #include <condition_variable>
@@ -34,20 +33,25 @@ private:
     ThreadPool(const ThreadPool&) = delete;
     void operator=(const ThreadPool&) = delete;
 
-    void ThreadRun(bool expanded);
+    void Work();
+    void Assist();
 
-    const size_t threadsInit_;
-    const size_t threadsMax_;
+    void SelfRemoveAssist();
+
+    const size_t initial_;
+    const size_t limits_;
 
     // synchronization
     std::mutex mutex_;
-    int threadsIdle_;
+    int idles_;
     // need to keep track of threads so we can join them
     std::vector< std::thread > workers_;
+
+    std::list< std::thread > assists_;
     // the task queue
     std::queue< std::function<void()> > tasks_;
 
-    std::condition_variable condition_;
+    std::condition_variable cond_;
     bool quit_;
 };
 
@@ -58,25 +62,31 @@ inline ThreadPool::ThreadPool(size_t threads)
 
 // the constructor just launches some amount of workers to init a pool.
 inline ThreadPool::ThreadPool(size_t threadsInit, size_t threadsMax)
-: threadsInit_(threadsInit > 0 ? threadsInit : 1)
-, threadsMax_(threadsMax > threadsInit_ ? threadsMax : 0)
-, threadsIdle_(0)
+: initial_(threadsInit > 0 ? threadsInit : 1)
+, limits_(threadsMax > initial_ ? threadsMax : 0)
+, idles_(0)
 , quit_(false) {
     // init the fixed number of threads.
-    for (size_t i = 0; i < threadsInit_; ++i)
-        workers_.emplace_back(&ThreadPool::ThreadRun, this, false);
+    for (size_t i = 0; i < initial_; ++i)
+        workers_.emplace_back(&ThreadPool::Work, this);
 }
 
 // the destructor joins all threads
 inline ThreadPool::~ThreadPool() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        quit_ = true;
-    }
-    condition_.notify_all();
+    mutex_.lock();
+    quit_ = true;
+    auto assists = std::move(assists_);
+    mutex_.unlock();
+
+    cond_.notify_all();
+
     for (auto& worker : workers_)
         if (worker.joinable())
             worker.join();
+
+    for (auto& assist : assists)
+        if (assist.joinable())
+            assist.join();
 }
 
 // add new work item to the pool
@@ -103,11 +113,11 @@ auto ThreadPool::Schedule(F&& f, Args&&... args)
         tasks_.emplace([task]() { (*task)(); });
 
         // no idles, start a new one to expand the pool.
-        assert(threadsIdle_ >= 0);
-        if (threadsIdle_ == 0 && workers_.size() < threadsMax_)
-            workers_.emplace_back(&ThreadPool::ThreadRun, this, true);
+        assert(idles_ >= 0);
+        if (idles_ == 0 && limits_ > initial_ && assists_.size() < limits_ - initial_)
+            assists_.emplace_back(&ThreadPool::Assist, this);
     }
-    condition_.notify_one();
+    cond_.notify_one();
     return res;
 }
 
@@ -122,58 +132,70 @@ void ThreadPool::Enqueue(F&& f, Args&&... args) {
         if (quit_)
             return; // no throws.
         tasks_.emplace([task]() { (*task)(); });
-        assert(threadsIdle_ >= 0);
-        if (threadsIdle_ == 0 && workers_.size() < threadsMax_)
-            workers_.emplace_back(&ThreadPool::ThreadRun, this, true);
+        assert(idles_ >= 0);
+        if (idles_ == 0 && limits_ > initial_ && assists_.size() < limits_ - initial_)
+            assists_.emplace_back(&ThreadPool::Assist, this);
     }
-    condition_.notify_one();
+    cond_.notify_one();
 }
 
-inline void ThreadPool::ThreadRun(bool expanded) {
+inline void ThreadPool::Work() {
     for (;;) {
-        std::function<void()> task;
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            // increase the idle count
-            ++threadsIdle_;
+        std::unique_lock<std::mutex> lock(mutex_);
+        ++idles_;
 
-            if (!expanded) {
-                // the initialized threads, just wait forever.
-                condition_.wait(lock, [this] {
-                    return quit_ || !tasks_.empty();
-                });
-                --threadsIdle_;
-            }
-            else {
-                // the expanded threads, wait for 1 minute idle and quit.
-                auto waitResult = condition_.wait_for(lock,
-                    std::chrono::minutes(1), [this] {
-                        return quit_ || !tasks_.empty();
-                    });
-                --threadsIdle_;
+        cond_.wait(lock, [this] {
+            return quit_ || !tasks_.empty();
+        });
 
-                if (!waitResult) {
-                    // remove thread object of self on quit.
-                    auto it = std::find_if(workers_.begin(), workers_.end(), [](const std::thread& th) {
-                        return th.get_id() == std::this_thread::get_id();
-                    });
-                    if (it != workers_.end()) {
-                        it->detach();
-                        workers_.erase(it);
-                    }
-                    return;
-                }
-            }
+        --idles_;
 
-            // check and get a task object.
-            if (quit_ && tasks_.empty())
+        if (tasks_.empty()) {
+            if (quit_)
                 return;
-
-            task = std::move(tasks_.front());
-            tasks_.pop();
+            continue;
         }
 
-        if (task)
-            task();
+        auto task = std::move(tasks_.front());
+        tasks_.pop();
+        lock.unlock();
+
+        task();
+    }
+}
+
+inline void ThreadPool::Assist() {
+    for (;;) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        // increase the idle count
+        ++idles_;
+
+        // the expanded threads, wait for 1 minute idle and quit.
+        cond_.wait_for(lock,std::chrono::minutes(1), [this] {
+            return quit_ || !tasks_.empty();
+        });
+        --idles_;
+
+        if (tasks_.empty()) {
+            if (!quit_)
+                SelfRemoveAssist();
+            return;
+        }
+
+        auto task = std::move(tasks_.front());
+        tasks_.pop();
+        lock.unlock();
+
+        task();
+    }
+}
+
+inline void ThreadPool::SelfRemoveAssist() {
+    auto it = std::find_if(assists_.begin(), assists_.end(), [](const std::thread& th) {
+        return th.get_id() == std::this_thread::get_id();
+    });
+    if (it != assists_.end()) {
+        it->detach();
+        assists_.erase(it);
     }
 }
