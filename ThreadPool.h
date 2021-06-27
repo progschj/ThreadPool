@@ -6,6 +6,7 @@
 #include <memory>
 #include <thread>
 #include <mutex>
+#include <chrono>
 #include <condition_variable>
 #include <future>
 #include <functional>
@@ -44,10 +45,12 @@ inline ThreadPool::ThreadPool(size_t threads)
 
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock,
+                        this->condition.wait_for(lock, std::chrono::milliseconds(200),
                             [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
+                        if(this->stop)
                             return;
+                        if(this->tasks.empty())
+                            continue;
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
