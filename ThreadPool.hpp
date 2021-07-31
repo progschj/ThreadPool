@@ -1,11 +1,11 @@
 #pragma once
 #include <cassert>
 #include <atomic>
-#include <vector>
 #include <list>
 #include <queue>
 #include <memory>
 #include <thread>
+#include <vector>
 #include <mutex>
 #include <future>
 #include <algorithm>
@@ -15,187 +15,257 @@
 
 class ThreadPool {
 public:
-    explicit ThreadPool(size_t);
-    ThreadPool(size_t, size_t);
+    enum EConstants {
+        TASK_QUEUE_DEPTH = 1024,
+    };
+
+    enum EWorkerType {
+        CORE_WORKER,
+        CACHE_WORKER,
+    };
+
+    explicit ThreadPool(int);
+    ThreadPool(int, int);
     ~ThreadPool();
 
-    template<class F, class... Args>
-    auto Schedule(F&& f, Args&&... args)
-        -> std::future<typename std::result_of<F(Args...)>::type>;
+    void Shutdown(bool join);
 
-    template<class F, class... Args>
-    void Enqueue(F&& f, Args&&... args);
+    template<typename _Func, typename... _Args>
+    auto Schedule(_Func&& f, _Args&&... args)
+        -> std::future<typename std::result_of<_Func(_Args...)>::type>;
 
-private:
+    template<typename _Func, typename... _Args>
+    void Enqueue(_Func&& f, _Args&&... args);
+
     // no default constructor
     ThreadPool() = delete;
     // noncopyable
     ThreadPool(const ThreadPool&) = delete;
     void operator=(const ThreadPool&) = delete;
 
-    void Work();
-    void Assist();
+private:
+    using Task = std::function<void()>;
 
-    void SelfRemoveAssist();
+    void RunWork(EWorkerType type);
 
-    const size_t initial_;
-    const size_t limits_;
+    template<typename _Task>
+    bool Grow(_Task firstTask);
+
+    template<typename _Task>
+    bool PushTask(_Task task);
+
+    void Suicide();
+
+    // size of core workers.
+    const int coreSize_;
+    // limit the maximum size of the workers;
+    const int limitSize_;
+
+    // quit signal
+    std::atomic_bool quit_;
+
+    // need to keep track of threads so we can join them
+    std::mutex workerMu_;
+    std::list<std::thread> workers_;
 
     // synchronization
-    std::mutex mutex_;
-    int idles_;
-    // need to keep track of threads so we can join them
-    std::vector< std::thread > workers_;
+    std::mutex mu_;
+    std::condition_variable pushCv_;
+    std::condition_variable popCv_;
 
-    std::list< std::thread > assists_;
     // the task queue
-    std::queue< std::function<void()> > tasks_;
+    std::queue<Task> tasks_;
 
-    std::condition_variable cond_;
-    bool quit_;
+    std::vector<std::thread> dying_;
 };
 
-// the constructor set threadsMax to zero,
+// This constructor set limitPoolSize to zero,
 // to create a static size threadpool.
-inline ThreadPool::ThreadPool(size_t threads)
-: ThreadPool(threads, 0) {}
+inline ThreadPool::ThreadPool(int fixedPoolSize)
+: ThreadPool(fixedPoolSize, 0) {
 
-// the constructor just launches some amount of workers to init a pool.
-inline ThreadPool::ThreadPool(size_t threadsInit, size_t threadsMax)
-: initial_(threadsInit > 0 ? threadsInit : 1)
-, limits_(threadsMax > initial_ ? threadsMax : 0)
-, idles_(0)
+}
+
+// This constructor just launches some amount of workers to init a pool.
+inline ThreadPool::ThreadPool(int corePoolSize, int limitPoolSize)
+: coreSize_(corePoolSize > 0 ? corePoolSize : 0)
+, limitSize_(limitPoolSize > coreSize_ ? limitPoolSize : (coreSize_ > 0 ? coreSize_ : 1))
 , quit_(false) {
-    // init the fixed number of threads.
-    for (size_t i = 0; i < initial_; ++i)
-        workers_.emplace_back(&ThreadPool::Work, this);
+
 }
 
-// the destructor joins all threads
+// The destructor joins all threads
 inline ThreadPool::~ThreadPool() {
-    mutex_.lock();
-    quit_ = true;
-    auto assists = std::move(assists_);
-    mutex_.unlock();
+    Shutdown(true);
 
-    cond_.notify_all();
+    mu_.lock();
+    auto dying = std::move(dying_);
+    mu_.unlock();
 
-    for (auto& worker : workers_)
-        if (worker.joinable())
-            worker.join();
-
-    for (auto& assist : assists)
-        if (assist.joinable())
-            assist.join();
+    for (auto& d : dying) {
+        if (d.joinable())
+            d.join();
+    }
 }
 
-// add new work item to the pool
-template<class F, class... Args>
-auto ThreadPool::Schedule(F&& f, Args&&... args)
--> std::future<typename std::result_of<F(Args...)>::type> {
-    using return_type = typename std::result_of<F(Args...)>::type;
+// Shut pool down first before destructed.
+inline void ThreadPool::Shutdown(bool join) {
+    quit_ = true;
+    pushCv_.notify_all();
+    popCv_.notify_all();
+
+    if (join) {
+        workerMu_.lock();
+        auto workers = std::move(workers_);
+        workerMu_.unlock();
+
+        for (auto& worker : workers)
+            if (worker.joinable())
+                worker.join();
+    }
+}
+
+// Add new work item to the pool
+template<typename _Func, typename... _Args>
+auto ThreadPool::Schedule(_Func&& f, _Args&&... args)
+-> std::future<typename std::result_of<_Func(_Args...)>::type> {
+    // Do not allow scheduling after stopping the pool
+    if (quit_)
+        throw std::runtime_error("Schedule on stopped ThreadPool");
+
+    using Result = typename std::result_of<_Func(_Args...)>::type;
 
     // package the function and arguments to a task object.
-    auto task = std::make_shared< std::packaged_task<return_type()> >(
-        std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
+    auto task = std::make_shared<std::packaged_task<Result()>>(
+        std::bind(std::forward<_Func>(f), std::forward<_Args>(args)...));
+    std::future<Result> result = task->get_future();
 
-    std::future<return_type> res = task->get_future();
+    if (Grow(task))
+        return result;
 
+    if (!PushTask(task))
+        throw std::runtime_error("Schedule on stopped ThreadPool");
+
+    return result;
+}
+
+// Add new work item to the pool, without any result request.
+template<typename _Func, typename... _Args>
+void ThreadPool::Enqueue(_Func&& f, _Args&&... args) {
+    if (quit_) return; // no throws.
+
+    // enqueue task without the future of results.
+    auto task = std::make_shared<std::packaged_task<void()>>(
+        std::bind(std::forward<_Func>(f), std::forward<_Args>(args)...));
+
+    if (Grow(task))
+        return;
+
+    PushTask(task);
+}
+
+inline void ThreadPool::RunWork(EWorkerType type) {
+    auto idleInterval = std::chrono::minutes(1);
+
+    for (;;) {
+        std::unique_lock<std::mutex> lock(mu_);
+        pushCv_.wait_for(lock, idleInterval, [this] {
+            return !tasks_.empty() || quit_;
+        });
+
+        if (!tasks_.empty()) {
+            auto task = std::move(tasks_.front());
+            tasks_.pop();
+
+            lock.unlock();
+            popCv_.notify_one();
+
+            task();
+        }
+        else if (quit_) {
+            break;
+        }
+        else {
+            if (!dying_.empty()) {
+                auto dying = std::move(dying_);
+                lock.unlock();
+
+                for (auto& d : dying) {
+                    if (d.joinable())
+                        d.join();
+                }
+            }
+
+            if (type == CACHE_WORKER)
+                break;
+        }
+    }
+}
+
+template<typename _Task>
+inline bool ThreadPool::Grow(_Task firstTask) {
+    std::lock_guard<std::mutex> guard(workerMu_);
+    if (quit_)
+        return false;
+
+    // Assign to a new core worker directly.
+    // Add at least one core worker. In case of core size set to zero.
+    if (workers_.empty() || workers_.size() < coreSize_) {
+        workers_.emplace_back([this, firstTask]() {
+            (*firstTask)();
+            RunWork(CORE_WORKER);
+        });
+        return true;
+    }
+
+    if (workers_.size() < limitSize_) {
+        mu_.lock();
+        auto taskCount = tasks_.size();
+        mu_.unlock();
+
+        if (taskCount > limitSize_) {
+            workers_.emplace_back([this]() {
+                RunWork(CACHE_WORKER);
+                if (!quit_)
+                    Suicide();
+            });
+        }
+    }
+
+    return false;
+}
+
+template<typename _Task>
+inline bool ThreadPool::PushTask(_Task task) {
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::mutex> lock(mu_);
+        popCv_.wait(lock, [this]() { return quit_ ||
+            tasks_.size() < TASK_QUEUE_DEPTH;
+        });
 
-        // don't allow scheduling after stopping the pool
         if (quit_)
-            throw std::runtime_error("Schedule on stopped ThreadPool");
+            return false;
 
         // enqueue the task.
         tasks_.emplace([task]() { (*task)(); });
-
-        // no idles, start a new one to expand the pool.
-        assert(idles_ >= 0);
-        if (idles_ == 0 && limits_ > initial_ && assists_.size() < limits_ - initial_)
-            assists_.emplace_back(&ThreadPool::Assist, this);
     }
-    cond_.notify_one();
-    return res;
+    pushCv_.notify_one();
+    return true;
 }
 
-template<class F, class... Args>
-void ThreadPool::Enqueue(F&& f, Args&&... args) {
-    // enqueue task without the future of results.
-    auto task = std::make_shared< std::packaged_task<void()> >(
-        std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (quit_)
-            return; // no throws.
-        tasks_.emplace([task]() { (*task)(); });
-        assert(idles_ >= 0);
-        if (idles_ == 0 && limits_ > initial_ && assists_.size() < limits_ - initial_)
-            assists_.emplace_back(&ThreadPool::Assist, this);
-    }
-    cond_.notify_one();
-}
+inline void ThreadPool::Suicide() {
+    const auto curTid = std::this_thread::get_id();
 
-inline void ThreadPool::Work() {
-    for (;;) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        ++idles_;
+    std::unique_lock<std::mutex> lock(workerMu_);
+    auto it = std::find_if(workers_.begin(), workers_.end(),
+        [curTid](const std::thread& th) { return th.get_id() == curTid; });
+    if (it == workers_.end())
+        return;
 
-        cond_.wait(lock, [this] {
-            return quit_ || !tasks_.empty();
-        });
+    auto curThrd = std::move(*it);
+    workers_.erase(it);
+    lock.unlock();
 
-        --idles_;
-
-        if (tasks_.empty()) {
-            if (quit_)
-                return;
-            continue;
-        }
-
-        auto task = std::move(tasks_.front());
-        tasks_.pop();
-        lock.unlock();
-
-        task();
-    }
-}
-
-inline void ThreadPool::Assist() {
-    for (;;) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        // increase the idle count
-        ++idles_;
-
-        // the expanded threads, wait for 1 minute idle and quit.
-        cond_.wait_for(lock,std::chrono::minutes(1), [this] {
-            return quit_ || !tasks_.empty();
-        });
-        --idles_;
-
-        if (tasks_.empty()) {
-            if (!quit_)
-                SelfRemoveAssist();
-            return;
-        }
-
-        auto task = std::move(tasks_.front());
-        tasks_.pop();
-        lock.unlock();
-
-        task();
-    }
-}
-
-inline void ThreadPool::SelfRemoveAssist() {
-    auto it = std::find_if(assists_.begin(), assists_.end(), [](const std::thread& th) {
-        return th.get_id() == std::this_thread::get_id();
-    });
-    if (it != assists_.end()) {
-        it->detach();
-        assists_.erase(it);
-    }
+    std::lock_guard<std::mutex> guard(mu_);
+    dying_.emplace_back(std::move(curThrd));
 }
