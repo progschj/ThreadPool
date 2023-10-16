@@ -87,7 +87,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 inline ThreadPool::~ThreadPool()
 {
     {
-        std::unique_lock<std::mutex> lock(queue_mutex);
+        std::lock_guard<std::mutex> lock(queue_mutex);
         stop = true;
     }
     condition.notify_all();
