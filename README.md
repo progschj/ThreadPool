@@ -5,6 +5,7 @@ A simple C++11 Thread Pool implementation.
 
 Basic usage:
 ```c++
+// 创建4个线程组成的线程池
 // create thread pool with 4 worker threads
 ThreadPool pool(4);
 
