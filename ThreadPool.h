@@ -10,31 +10,37 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
+#include <type_traits>
 
 class ThreadPool {
 public:
     ThreadPool(size_t);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
-        -> std::future<typename std::result_of<F(Args...)>::type>;
+        -> std::future<typename std::invoke_result<F, Args...>::type>;
     ~ThreadPool();
-private:
-    // need to keep track of threads so we can join them
-    std::vector< std::thread > workers;
-    // the task queue
-    std::queue< std::function<void()> > tasks;
     
-    // synchronization
+    // 获取当前任务队列大小
+    size_t getTaskCount();
+    // 获取当前活跃线程数
+    size_t getActiveThreadCount();
+    
+private:
+    // 跟踪线程以便我们可以加入它们
+    std::vector<std::thread> workers;
+    // 任务队列
+    std::queue<std::function<void()>> tasks;
+    
+    // 同步
     std::mutex queue_mutex;
     std::condition_variable condition;
     bool stop;
 };
- 
-// the constructor just launches some amount of workers
+
 inline ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
+    : stop(false)
 {
-    for(size_t i = 0;i<threads;++i)
+    for(size_t i = 0; i < threads; ++i)
         workers.emplace_back(
             [this]
             {
@@ -52,20 +58,23 @@ inline ThreadPool::ThreadPool(size_t threads)
                         this->tasks.pop();
                     }
 
-                    task();
+                    try {
+                        task();
+                    } catch (const std::exception& e) {
+                        // 处理任务中的异常
+                    }
                 }
             }
         );
 }
 
-// add new work item to the pool
 template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args) 
-    -> std::future<typename std::result_of<F(Args...)>::type>
+    -> std::future<typename std::invoke_result<F, Args...>::type>
 {
-    using return_type = typename std::result_of<F(Args...)>::type;
+    using return_type = typename std::invoke_result<F, Args...>::type;
 
-    auto task = std::make_shared< std::packaged_task<return_type()> >(
+    auto task = std::make_shared<std::packaged_task<return_type()>>(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...)
         );
         
@@ -73,7 +82,6 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
 
-        // don't allow enqueueing after stopping the pool
         if(stop)
             throw std::runtime_error("enqueue on stopped ThreadPool");
 
@@ -83,7 +91,6 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     return res;
 }
 
-// the destructor joins all threads
 inline ThreadPool::~ThreadPool()
 {
     {
@@ -93,6 +100,16 @@ inline ThreadPool::~ThreadPool()
     condition.notify_all();
     for(std::thread &worker: workers)
         worker.join();
+}
+
+size_t ThreadPool::getTaskCount() {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    return tasks.size();
+}
+
+size_t ThreadPool::getActiveThreadCount() {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    return workers.size();
 }
 
 #endif
