@@ -31,31 +31,34 @@ private:
 };
  
 // the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads)
-    :   stop(false)
-{
-    for(size_t i = 0;i<threads;++i)
+inline ThreadPool::// 修改后的构造函数（在 lambda 中检查 stop 标志）
+ThreadPool(size_t threads) : stop(false) {
+    for (size_t i = 0; i < threads; ++i) {
         workers.emplace_back(
-            [this]
-            {
-                for(;;)
-                {
+            [this] { 
+                while (true) {
                     std::function<void()> task;
-
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
-                        this->condition.wait(lock,
-                            [this]{ return this->stop || !this->tasks.empty(); });
-                        if(this->stop && this->tasks.empty())
+                        // 关键修复：等待条件同时检查 stop 和任务队列
+                        this->condition.wait(lock, [this] { 
+                            return this->stop || !this->tasks.empty(); 
+                        });
+                        
+                        // 若 stop 且任务队列为空，退出线程
+                        if (this->stop && this->tasks.empty()) {
                             return;
+                        }
+                        
+                        // 否则执行任务
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
-
-                    task();
+                    task();  // 执行任务时不持有锁
                 }
             }
         );
+    }
 }
 
 // add new work item to the pool
@@ -84,15 +87,20 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 }
 
 // the destructor joins all threads
-inline ThreadPool::~ThreadPool()
-{
+inline ThreadPool::// 修改后的析构函数
+~ThreadPool() {
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
-        stop = true;
+        stop = true;  // 设置停止标志
     }
-    condition.notify_all();
-    for(std::thread &worker: workers)
-        worker.join();
+    condition.notify_all();  // 唤醒所有等待的线程
+    
+    // 等待所有线程结束（添加 joinable 检查）
+    for (std::thread& worker : workers) {
+        if (worker.joinable()) {  // 避免重复 join 导致的错误
+            worker.join();
+        }
+    }
 }
 
 #endif
